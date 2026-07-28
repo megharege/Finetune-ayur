@@ -1,0 +1,328 @@
+{
+  "dataset_name": "AyurShloka-QA",
+  "built_from": "8 classical Ayurvedic shloka + commentary chunk files",
+  "schema": "BhashaBench-Ayur (BBA) compatible",
+  "total_questions": 21475,
+  "by_type": {
+    "Assertion or Reasoning": 964,
+    "Assorted": 6465,
+    "Fill in the blanks": 3876,
+    "MCQ": 8261,
+    "Match the column": 1909
+  },
+  "by_subtype": {
+    "both_true_unrelated": 329,
+    "verse_exposition": 4737,
+    "sanskrit_pada": 1932,
+    "correct_statement": 3122,
+    "verse_translation": 1871,
+    "masked_term": 702,
+    "short_note": 325,
+    "topic_to_reference": 1035,
+    "technical_term": 1944,
+    "four_pair": 874,
+    "true_false_true": 458,
+    "one_line_source": 377,
+    "locate_chapter": 626,
+    "true_false_false": 341,
+    "A_true_R_false": 340,
+    "paryaya": 258,
+    "transliterate_and_explain": 220,
+    "verse_subject": 1276,
+    "A_false_R_true": 209,
+    "enumeration_count": 185,
+    "locate_sthana": 221,
+    "R_explains_A": 86,
+    "direct_recall": 7
+  },
+  "by_difficulty": {
+    "Hard": 5359,
+    "Easy": 4314,
+    "Medium": 11802
+  },
+  "by_grounding": {
+    "commentary_clinical": 5402,
+    "shloka_to_meaning": 10036,
+    "term_recall": 2904,
+    "concept_to_source": 3133
+  },
+  "by_domain": {
+    "Panchakarma & Rasayana (Detoxification & Rejuvenation)": 1962,
+    "Dravyaguna & Bhaishajya (Pharmacology & Therapeutics)": 3371,
+    "Roga Vigyana (Diagnostics & Pathology)": 5666,
+    "Shalakya Tantra (ENT, Ophthalmology & Dentistry)": 931,
+    "Samhita & Siddhanta (Fundamental Principles)": 4307,
+    "Kayachikitsa (General Medicine & Internal Medicine)": 3226,
+    "Stri Roga & Prasuti Tantra (Gynecology & Obstetrics)": 414,
+    "Shalya Tantra (Surgery)": 662,
+    "Sharir (Anatomy & Physiology)": 410,
+    "Agad Tantra & Forensic Medicine (Toxicology)": 357,
+    "Kaumarbhritya & Pediatrics (Child Health)": 109,
+    "Swasthavritta & Public Health (Preventive Medicine)": 36,
+    "Ayurvedic Literature & History": 24
+  },
+  "answer_letter_distribution": {
+    "D": 3715,
+    "B": 4038,
+    "A": 4280,
+    "C": 3776
+  },
+  "per_book": {
+    "Charaka Samhita": {
+      "chunks": 1497,
+      "chunks_covered": 1490,
+      "questions": 4344,
+      "questions_per_chunk": 2.9,
+      "by_type": {
+        "Assertion or Reasoning": 242,
+        "Assorted": 1714,
+        "Fill in the blanks": 601,
+        "MCQ": 1741,
+        "Match the column": 46
+      },
+      "by_difficulty": {
+        "Hard": 924,
+        "Easy": 728,
+        "Medium": 2692
+      },
+      "by_grounding": {
+        "commentary_clinical": 1472,
+        "shloka_to_meaning": 2270,
+        "concept_to_source": 290,
+        "term_recall": 312
+      },
+      "by_domain": {
+        "Panchakarma & Rasayana (Detoxification & Rejuvenation)": 1786,
+        "Kayachikitsa (General Medicine & Internal Medicine)": 1101,
+        "Roga Vigyana (Diagnostics & Pathology)": 422,
+        "Samhita & Siddhanta (Fundamental Principles)": 708,
+        "Shalya Tantra (Surgery)": 158,
+        "Sharir (Anatomy & Physiology)": 169
+      },
+      "file": "by_book/Charaka_Samhita_questions.jsonl"
+    },
+    "Sushruta Samhita": {
+      "chunks": 418,
+      "chunks_covered": 418,
+      "questions": 1278,
+      "questions_per_chunk": 3.06,
+      "by_type": {
+        "Fill in the blanks": 338,
+        "MCQ": 454,
+        "Assorted": 457,
+        "Assertion or Reasoning": 29
+      },
+      "by_difficulty": {
+        "Medium": 865,
+        "Easy": 361,
+        "Hard": 52
+      },
+      "by_grounding": {
+        "shloka_to_meaning": 863,
+        "commentary_clinical": 284,
+        "term_recall": 131
+      },
+      "by_domain": {
+        "Roga Vigyana (Diagnostics & Pathology)": 1278
+      },
+      "file": "by_book/Sushruta_Samhita_questions.jsonl"
+    },
+    "Ashtanga Hridaya": {
+      "chunks": 913,
+      "chunks_covered": 896,
+      "questions": 2464,
+      "questions_per_chunk": 2.7,
+      "by_type": {
+        "Fill in the blanks": 361,
+        "Assorted": 1060,
+        "Match the column": 357,
+        "MCQ": 601,
+        "Assertion or Reasoning": 85
+      },
+      "by_difficulty": {
+        "Easy": 894,
+        "Medium": 1078,
+        "Hard": 492
+      },
+      "by_grounding": {
+        "term_recall": 455,
+        "shloka_to_meaning": 950,
+        "concept_to_source": 653,
+        "commentary_clinical": 406
+      },
+      "by_domain": {
+        "Samhita & Siddhanta (Fundamental Principles)": 1738,
+        "Kayachikitsa (General Medicine & Internal Medicine)": 506,
+        "Sharir (Anatomy & Physiology)": 220
+      },
+      "file": "by_book/Ashtanga_Hridaya_questions.jsonl"
+    },
+    "Sharangadhara Samhita": {
+      "chunks": 593,
+      "chunks_covered": 593,
+      "questions": 1346,
+      "questions_per_chunk": 2.27,
+      "by_type": {
+        "Fill in the blanks": 525,
+        "Assorted": 337,
+        "MCQ": 440,
+        "Assertion or Reasoning": 35,
+        "Match the column": 9
+      },
+      "by_difficulty": {
+        "Medium": 998,
+        "Easy": 259,
+        "Hard": 89
+      },
+      "by_grounding": {
+        "shloka_to_meaning": 904,
+        "commentary_clinical": 270,
+        "term_recall": 158,
+        "concept_to_source": 14
+      },
+      "by_domain": {
+        "Samhita & Siddhanta (Fundamental Principles)": 1346
+      },
+      "file": "by_book/Sharangadhara_Samhita_questions.jsonl"
+    },
+    "Bhavaprakasha Nighantu": {
+      "chunks": 1052,
+      "chunks_covered": 1024,
+      "questions": 5242,
+      "questions_per_chunk": 4.98,
+      "by_type": {
+        "Assorted": 1296,
+        "MCQ": 2218,
+        "Fill in the blanks": 944,
+        "Match the column": 517,
+        "Assertion or Reasoning": 267
+      },
+      "by_difficulty": {
+        "Hard": 1630,
+        "Medium": 2519,
+        "Easy": 1093
+      },
+      "by_grounding": {
+        "shloka_to_meaning": 1752,
+        "commentary_clinical": 1606,
+        "term_recall": 1056,
+        "concept_to_source": 828
+      },
+      "by_domain": {
+        "Dravyaguna & Bhaishajya (Pharmacology & Therapeutics)": 3371,
+        "Shalakya Tantra (ENT, Ophthalmology & Dentistry)": 323,
+        "Panchakarma & Rasayana (Detoxification & Rejuvenation)": 176,
+        "Kayachikitsa (General Medicine & Internal Medicine)": 637,
+        "Agad Tantra & Forensic Medicine (Toxicology)": 292,
+        "Samhita & Siddhanta (Fundamental Principles)": 32,
+        "Sharir (Anatomy & Physiology)": 12,
+        "Roga Vigyana (Diagnostics & Pathology)": 22,
+        "Shalya Tantra (Surgery)": 121,
+        "Kaumarbhritya & Pediatrics (Child Health)": 78,
+        "Stri Roga & Prasuti Tantra (Gynecology & Obstetrics)": 142,
+        "Swasthavritta & Public Health (Preventive Medicine)": 36
+      },
+      "file": "by_book/Bhavaprakasha_Nighantu_questions.jsonl"
+    },
+    "Madhava Nidanam (Part 1)": {
+      "chunks": 728,
+      "chunks_covered": 722,
+      "questions": 3059,
+      "questions_per_chunk": 4.2,
+      "by_type": {
+        "MCQ": 1299,
+        "Fill in the blanks": 516,
+        "Assorted": 795,
+        "Match the column": 325,
+        "Assertion or Reasoning": 124
+      },
+      "by_difficulty": {
+        "Medium": 1681,
+        "Easy": 593,
+        "Hard": 785
+      },
+      "by_grounding": {
+        "shloka_to_meaning": 1394,
+        "term_recall": 453,
+        "concept_to_source": 527,
+        "commentary_clinical": 685
+      },
+      "by_domain": {
+        "Roga Vigyana (Diagnostics & Pathology)": 2406,
+        "Samhita & Siddhanta (Fundamental Principles)": 303,
+        "Agad Tantra & Forensic Medicine (Toxicology)": 65,
+        "Shalakya Tantra (ENT, Ophthalmology & Dentistry)": 216,
+        "Kayachikitsa (General Medicine & Internal Medicine)": 30,
+        "Stri Roga & Prasuti Tantra (Gynecology & Obstetrics)": 6,
+        "Ayurvedic Literature & History": 24,
+        "Sharir (Anatomy & Physiology)": 9
+      },
+      "file": "by_book/Madhava_Nidanam_Part_1_questions.jsonl"
+    },
+    "Madhava Nidanam (Part 2)": {
+      "chunks": 234,
+      "chunks_covered": 234,
+      "questions": 1492,
+      "questions_per_chunk": 6.38,
+      "by_type": {
+        "Assorted": 308,
+        "MCQ": 670,
+        "Assertion or Reasoning": 73,
+        "Match the column": 211,
+        "Fill in the blanks": 230
+      },
+      "by_difficulty": {
+        "Medium": 756,
+        "Hard": 594,
+        "Easy": 142
+      },
+      "by_grounding": {
+        "shloka_to_meaning": 733,
+        "commentary_clinical": 355,
+        "concept_to_source": 264,
+        "term_recall": 140
+      },
+      "by_domain": {
+        "Roga Vigyana (Diagnostics & Pathology)": 310,
+        "Stri Roga & Prasuti Tantra (Gynecology & Obstetrics)": 266,
+        "Shalakya Tantra (ENT, Ophthalmology & Dentistry)": 392,
+        "Shalya Tantra (Surgery)": 217,
+        "Kayachikitsa (General Medicine & Internal Medicine)": 103,
+        "Samhita & Siddhanta (Fundamental Principles)": 173,
+        "Kaumarbhritya & Pediatrics (Child Health)": 31
+      },
+      "file": "by_book/Madhava_Nidanam_Part_2_questions.jsonl"
+    },
+    "Madhava Nidana (Laghutrayi)": {
+      "chunks": 403,
+      "chunks_covered": 403,
+      "questions": 2250,
+      "questions_per_chunk": 5.58,
+      "by_type": {
+        "Fill in the blanks": 361,
+        "Match the column": 444,
+        "MCQ": 838,
+        "Assorted": 498,
+        "Assertion or Reasoning": 109
+      },
+      "by_difficulty": {
+        "Medium": 1213,
+        "Hard": 793,
+        "Easy": 244
+      },
+      "by_grounding": {
+        "shloka_to_meaning": 1170,
+        "concept_to_source": 557,
+        "term_recall": 199,
+        "commentary_clinical": 324
+      },
+      "by_domain": {
+        "Roga Vigyana (Diagnostics & Pathology)": 1228,
+        "Kayachikitsa (General Medicine & Internal Medicine)": 849,
+        "Shalya Tantra (Surgery)": 166,
+        "Samhita & Siddhanta (Fundamental Principles)": 7
+      },
+      "file": "by_book/Madhava_Nidana_Laghutrayi_questions.jsonl"
+    }
+  }
+}
