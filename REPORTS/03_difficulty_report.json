@@ -1,0 +1,39 @@
+{
+  "rows": 77355,
+  "weights": {
+    "format_prior": 0.3,
+    "distractor_confusability": 0.25,
+    "evidence_thinness": 0.15,
+    "devanagari_fraction": 0.15,
+    "mean_option_len": 0.1,
+    "multi_answer": 0.05
+  },
+  "tertile_counts": {
+    "Hard": 25785,
+    "Medium": 25785,
+    "Easy": 25785
+  },
+  "bba_calibrated_counts": {
+    "Medium": 32643,
+    "Easy": 41068,
+    "Hard": 3644
+  },
+  "bba_target_mix": {
+    "Easy": 0.5309,
+    "Medium": 0.422,
+    "Hard": 0.0471
+  },
+  "mean_score_by_type": {
+    "Assertion or Reasoning": 0.1757,
+    "Assorted": 0.0805,
+    "Fill in the blanks": 0.0614,
+    "MCQ": 0.084,
+    "Match the column": 0.2258,
+    "Multiple selection": 0.1394
+  },
+  "validation": {
+    "matched_items": 0,
+    "observed_accuracy_by_predicted_band": {},
+    "note": "monotonically decreasing accuracy Easy>Medium>Hard means the ranking predicts real difficulty"
+  }
+}

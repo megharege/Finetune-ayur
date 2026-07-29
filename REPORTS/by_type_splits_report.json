@@ -1,0 +1,362 @@
+{
+  "train": {
+    "Assertion or Reasoning": {
+      "file": "assertion_or_reasoning.jsonl",
+      "rows": 9701,
+      "facts": 9701,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 3519,
+        "Charaka Samhita": 1630,
+        "Madhava Nidana (Laghutrayi)": 1366,
+        "Madhava Nidanam (Part 1)": 1275,
+        "Madhava Nidanam (Part 2)": 1146,
+        "Ashtanga Hridaya": 385,
+        "Sharangadhara Samhita": 233,
+        "Sushruta Samhita": 147
+      },
+      "by_difficulty_bba": {
+        "Medium": 9701
+      }
+    },
+    "Assorted": {
+      "file": "assorted.jsonl",
+      "rows": 13085,
+      "facts": 13085,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 4752,
+        "Charaka Samhita": 2112,
+        "Madhava Nidana (Laghutrayi)": 1752,
+        "Madhava Nidanam (Part 1)": 1721,
+        "Madhava Nidanam (Part 2)": 1506,
+        "Ashtanga Hridaya": 576,
+        "Sharangadhara Samhita": 400,
+        "Sushruta Samhita": 266
+      },
+      "by_difficulty_bba": {
+        "Medium": 2532,
+        "Easy": 10547,
+        "Hard": 6
+      }
+    },
+    "Fill in the blanks": {
+      "file": "fill_in_the_blanks.jsonl",
+      "rows": 17252,
+      "facts": 13825,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 7300,
+        "Madhava Nidanam (Part 1)": 2751,
+        "Madhava Nidanam (Part 2)": 2002,
+        "Madhava Nidana (Laghutrayi)": 1869,
+        "Charaka Samhita": 1524,
+        "Ashtanga Hridaya": 673,
+        "Sharangadhara Samhita": 649,
+        "Sushruta Samhita": 484
+      },
+      "by_difficulty_bba": {
+        "Easy": 16348,
+        "Medium": 904
+      }
+    },
+    "MCQ": {
+      "file": "mcq.jsonl",
+      "rows": 14323,
+      "facts": 13237,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 3715,
+        "Charaka Samhita": 2822,
+        "Madhava Nidanam (Part 1)": 2490,
+        "Madhava Nidana (Laghutrayi)": 1353,
+        "Ashtanga Hridaya": 1312,
+        "Madhava Nidanam (Part 2)": 1012,
+        "Sushruta Samhita": 835,
+        "Sharangadhara Samhita": 784
+      },
+      "by_difficulty_bba": {
+        "Medium": 6343,
+        "Easy": 7975,
+        "Hard": 5
+      }
+    },
+    "Match the column": {
+      "file": "match_the_column.jsonl",
+      "rows": 4290,
+      "facts": 1976,
+      "books": 7,
+      "by_book": {
+        "Madhava Nidana (Laghutrayi)": 1367,
+        "Madhava Nidanam (Part 1)": 909,
+        "Bhavaprakasha Nighantu": 759,
+        "Madhava Nidanam (Part 2)": 591,
+        "Ashtanga Hridaya": 553,
+        "Charaka Samhita": 98,
+        "Sharangadhara Samhita": 13
+      },
+      "by_difficulty_bba": {
+        "Hard": 3089,
+        "Medium": 1201
+      }
+    },
+    "Multiple selection": {
+      "file": "multiple_selection.jsonl",
+      "rows": 7050,
+      "facts": 3908,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 2883,
+        "Charaka Samhita": 1166,
+        "Madhava Nidanam (Part 1)": 1012,
+        "Ashtanga Hridaya": 741,
+        "Madhava Nidanam (Part 2)": 496,
+        "Sharangadhara Samhita": 361,
+        "Madhava Nidana (Laghutrayi)": 274,
+        "Sushruta Samhita": 117
+      },
+      "by_difficulty_bba": {
+        "Medium": 7044,
+        "Hard": 5,
+        "Easy": 1
+      }
+    }
+  },
+  "validation": {
+    "Assertion or Reasoning": {
+      "file": "assertion_or_reasoning.jsonl",
+      "rows": 801,
+      "facts": 801,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 285,
+        "Charaka Samhita": 132,
+        "Madhava Nidanam (Part 1)": 124,
+        "Madhava Nidanam (Part 2)": 104,
+        "Madhava Nidana (Laghutrayi)": 96,
+        "Ashtanga Hridaya": 38,
+        "Sushruta Samhita": 13,
+        "Sharangadhara Samhita": 9
+      },
+      "by_difficulty_bba": {
+        "Medium": 801
+      }
+    },
+    "Assorted": {
+      "file": "assorted.jsonl",
+      "rows": 1074,
+      "facts": 1074,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 394,
+        "Madhava Nidanam (Part 1)": 159,
+        "Charaka Samhita": 157,
+        "Madhava Nidana (Laghutrayi)": 132,
+        "Madhava Nidanam (Part 2)": 128,
+        "Ashtanga Hridaya": 48,
+        "Sushruta Samhita": 29,
+        "Sharangadhara Samhita": 27
+      },
+      "by_difficulty_bba": {
+        "Medium": 195,
+        "Easy": 879
+      }
+    },
+    "Fill in the blanks": {
+      "file": "fill_in_the_blanks.jsonl",
+      "rows": 1392,
+      "facts": 1109,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 575,
+        "Madhava Nidanam (Part 1)": 253,
+        "Madhava Nidanam (Part 2)": 173,
+        "Madhava Nidana (Laghutrayi)": 141,
+        "Charaka Samhita": 119,
+        "Ashtanga Hridaya": 55,
+        "Sushruta Samhita": 44,
+        "Sharangadhara Samhita": 32
+      },
+      "by_difficulty_bba": {
+        "Medium": 69,
+        "Easy": 1323
+      }
+    },
+    "MCQ": {
+      "file": "mcq.jsonl",
+      "rows": 1053,
+      "facts": 971,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 256,
+        "Charaka Samhita": 212,
+        "Madhava Nidanam (Part 1)": 186,
+        "Madhava Nidana (Laghutrayi)": 97,
+        "Ashtanga Hridaya": 90,
+        "Madhava Nidanam (Part 2)": 85,
+        "Sushruta Samhita": 77,
+        "Sharangadhara Samhita": 50
+      },
+      "by_difficulty_bba": {
+        "Medium": 502,
+        "Easy": 551
+      }
+    },
+    "Match the column": {
+      "file": "match_the_column.jsonl",
+      "rows": 335,
+      "facts": 147,
+      "books": 6,
+      "by_book": {
+        "Madhava Nidana (Laghutrayi)": 110,
+        "Madhava Nidanam (Part 1)": 86,
+        "Bhavaprakasha Nighantu": 49,
+        "Ashtanga Hridaya": 43,
+        "Madhava Nidanam (Part 2)": 43,
+        "Charaka Samhita": 4
+      },
+      "by_difficulty_bba": {
+        "Hard": 235,
+        "Medium": 100
+      }
+    },
+    "Multiple selection": {
+      "file": "multiple_selection.jsonl",
+      "rows": 299,
+      "facts": 171,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 105,
+        "Ashtanga Hridaya": 65,
+        "Charaka Samhita": 53,
+        "Madhava Nidanam (Part 1)": 36,
+        "Madhava Nidanam (Part 2)": 22,
+        "Madhava Nidana (Laghutrayi)": 14,
+        "Sharangadhara Samhita": 3,
+        "Sushruta Samhita": 1
+      },
+      "by_difficulty_bba": {
+        "Medium": 299
+      }
+    }
+  },
+  "test": {
+    "Assertion or Reasoning": {
+      "file": "assertion_or_reasoning.jsonl",
+      "rows": 903,
+      "facts": 903,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 313,
+        "Charaka Samhita": 153,
+        "Madhava Nidana (Laghutrayi)": 138,
+        "Madhava Nidanam (Part 1)": 116,
+        "Madhava Nidanam (Part 2)": 109,
+        "Ashtanga Hridaya": 32,
+        "Sharangadhara Samhita": 23,
+        "Sushruta Samhita": 19
+      },
+      "by_difficulty_bba": {
+        "Medium": 903
+      }
+    },
+    "Assorted": {
+      "file": "assorted.jsonl",
+      "rows": 1233,
+      "facts": 1233,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 421,
+        "Charaka Samhita": 211,
+        "Madhava Nidana (Laghutrayi)": 175,
+        "Madhava Nidanam (Part 2)": 156,
+        "Madhava Nidanam (Part 1)": 152,
+        "Ashtanga Hridaya": 45,
+        "Sharangadhara Samhita": 38,
+        "Sushruta Samhita": 35
+      },
+      "by_difficulty_bba": {
+        "Medium": 242,
+        "Easy": 991
+      }
+    },
+    "Fill in the blanks": {
+      "file": "fill_in_the_blanks.jsonl",
+      "rows": 1581,
+      "facts": 1273,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 631,
+        "Madhava Nidanam (Part 1)": 260,
+        "Madhava Nidanam (Part 2)": 217,
+        "Madhava Nidana (Laghutrayi)": 187,
+        "Charaka Samhita": 125,
+        "Sharangadhara Samhita": 65,
+        "Ashtanga Hridaya": 53,
+        "Sushruta Samhita": 43
+      },
+      "by_difficulty_bba": {
+        "Easy": 1487,
+        "Medium": 94
+      }
+    },
+    "MCQ": {
+      "file": "mcq.jsonl",
+      "rows": 1230,
+      "facts": 1124,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 270,
+        "Charaka Samhita": 255,
+        "Madhava Nidanam (Part 1)": 197,
+        "Madhava Nidana (Laghutrayi)": 132,
+        "Madhava Nidanam (Part 2)": 130,
+        "Ashtanga Hridaya": 100,
+        "Sushruta Samhita": 77,
+        "Sharangadhara Samhita": 69
+      },
+      "by_difficulty_bba": {
+        "Medium": 586,
+        "Easy": 644
+      }
+    },
+    "Match the column": {
+      "file": "match_the_column.jsonl",
+      "rows": 371,
+      "facts": 178,
+      "books": 7,
+      "by_book": {
+        "Madhava Nidana (Laghutrayi)": 106,
+        "Madhava Nidanam (Part 2)": 76,
+        "Bhavaprakasha Nighantu": 66,
+        "Madhava Nidanam (Part 1)": 63,
+        "Ashtanga Hridaya": 45,
+        "Charaka Samhita": 11,
+        "Sharangadhara Samhita": 4
+      },
+      "by_difficulty_bba": {
+        "Hard": 258,
+        "Medium": 113
+      }
+    },
+    "Multiple selection": {
+      "file": "multiple_selection.jsonl",
+      "rows": 330,
+      "facts": 197,
+      "books": 8,
+      "by_book": {
+        "Bhavaprakasha Nighantu": 123,
+        "Ashtanga Hridaya": 65,
+        "Madhava Nidanam (Part 1)": 48,
+        "Charaka Samhita": 41,
+        "Madhava Nidana (Laghutrayi)": 28,
+        "Madhava Nidanam (Part 2)": 21,
+        "Sharangadhara Samhita": 2,
+        "Sushruta Samhita": 2
+      },
+      "by_difficulty_bba": {
+        "Medium": 330
+      }
+    }
+  }
+}

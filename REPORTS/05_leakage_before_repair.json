@@ -1,0 +1,57 @@
+{
+  "rows": {
+    "train": 65701,
+    "validation": 5436,
+    "test": 6218
+  },
+  "question_id": {
+    "train|validation": 0,
+    "train|test": 0,
+    "validation|test": 0
+  },
+  "exact_stem": {
+    "train|validation": 0,
+    "train|test": 0,
+    "validation|test": 0
+  },
+  "full_item": {
+    "train|validation": 0,
+    "train|test": 0,
+    "validation|test": 0
+  },
+  "fact_id": {
+    "train|validation": 0,
+    "train|test": 0,
+    "validation|test": 0
+  },
+  "near_duplicate": {
+    "threshold": 0.95,
+    "train|validation": {
+      "above_threshold": 482,
+      "max_cosine": 0.9971
+    },
+    "train|test": {
+      "above_threshold": 570,
+      "max_cosine": 0.9972
+    }
+  },
+  "bba_contamination_in_train": {
+    "threshold": 0.8,
+    "rows_above": 0,
+    "max_cosine_in_train": 0.7401
+  },
+  "repair": {
+    "validation": {
+      "dropped": 482,
+      "kept": 4954,
+      "file": "validation_clean.jsonl"
+    },
+    "test": {
+      "dropped": 570,
+      "kept": 5648,
+      "file": "test_clean.jsonl"
+    }
+  },
+  "total_leaks": 1052,
+  "verdict": "LEAKAGE DETECTED"
+}

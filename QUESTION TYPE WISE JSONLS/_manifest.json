@@ -1,0 +1,31 @@
+{
+  "source": "master_80k.jsonl",
+  "total_rows": 80000,
+  "distinct_question_ids": 80000,
+  "by_type": {
+    "Fill in the blanks": {
+      "file": "fill_in_the_blanks.json",
+      "rows": 20699
+    },
+    "MCQ": {
+      "file": "mcq.json",
+      "rows": 18262
+    },
+    "Assorted": {
+      "file": "assorted.json",
+      "rows": 15428
+    },
+    "Assertion or Reasoning": {
+      "file": "assertion_or_reasoning.json",
+      "rows": 11430
+    },
+    "Multiple selection": {
+      "file": "multiple_selection.json",
+      "rows": 9089
+    },
+    "Match the column": {
+      "file": "match_the_column.json",
+      "rows": 5092
+    }
+  }
+}

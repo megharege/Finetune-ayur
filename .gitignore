@@ -1,0 +1,16 @@
+# Large data files exceeding GitHub's 100 MB file size limit
+train test splits/train.json
+all book questions testing FINAL/ayur_qa_v2_80k.jsonl
+Fquestes/ayur_qa_v2_80k.jsonl
+Fquestes/train.jsonl
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Temp/lock files
+~$*
+
+# Logs
+*.log

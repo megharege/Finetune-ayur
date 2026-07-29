@@ -1,0 +1,939 @@
+% =====================================================================
+%  AyurLLM — CVPR-style two-column paper
+%  Compile:  pdflatex ayurllm_paper.tex   (twice, for cross-references)
+%
+%  If you have the official CVPR style files, delete the GEOMETRY block
+%  below and use \usepackage{cvpr} (or \usepackage[review]{cvpr}) instead.
+%  The geometry here reproduces the CVPR text block exactly.
+% =====================================================================
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{caption}
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=black]{hyperref}
+
+% ---------------- GEOMETRY: CVPR text block ----------------
+\usepackage[letterpaper,
+            top=1in, bottom=1.125in,
+            left=0.84375in, right=0.84375in]{geometry}
+\setlength{\columnsep}{0.3125in}
+% -----------------------------------------------------------
+
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\setlength{\parskip}{0pt}
+\setlength{\abovedisplayskip}{4pt}
+\setlength{\belowdisplayskip}{4pt}
+
+% ---- the final OCR engine is set in ONE place; change it here ----
+% If "LiFT" is in fact Liquid AI's LFM2-VL, change the line below to
+% \newcommand{\ocrfinal}{LFM2-VL (GGUF)}  and the whole paper updates.
+\newcommand{\ocrfinal}{LiFT (GGUF)}
+
+% ---- placeholders for values not yet supplied -----------------------
+% \draftgapstrue   shows every unfinished section as a boxed to-do  (working copy)
+% \draftgapsfalse  hides them, leaving only the finished text       (copy to share)
+\newif\ifdraftgaps
+\draftgapstrue
+
+\newcommand{\TBD}[1]{\ifdraftgaps\textcolor{red}{\textbf{[#1]}}\else\rule{1.2em}{0pt}\fi}
+\newcommand{\gap}[2]{%
+  \ifdraftgaps
+    \par\medskip\noindent\fbox{\parbox{0.95\columnwidth}{%
+    \small\textbf{[ TO BE COMPLETED --- #1 ]}\\[2pt]\emph{#2}}}\par\medskip
+  \fi}
+
+\title{\vspace{-1.2em}\textbf{\fontsize{14}{16}\selectfont
+AyurLLM: A Verified Shloka-Level Corpus and a Traceable Instruction
+Benchmark from Eight Classical Ayurvedic Treatises}\vspace{-0.4em}}
+
+\author{Anonymous CVPR submission\\
+Paper ID \TBD{ID}}
+\date{}                     % CVPR papers carry no date line
+
+\begin{document}
+\maketitle
+
+% =====================================================================
+\begin{abstract}
+Classical Ayurvedic knowledge is distributed as printed treatises in which
+Devanagari verse, IAST transliteration and prose commentary in English or
+Hindi are interleaved on the page, and in which the same logical unit --- a
+\emph{shloka} and its gloss --- is typeset differently in every edition. Such
+material is not searchable by symptom, and it is not directly usable as
+training data. We present AyurLLM, an end-to-end pipeline that converts eight
+such treatises into a verified, schema-normalised corpus and into an
+instruction benchmark whose every answer remains traceable to the printed
+page. We report four contributions. First, an OCR selection protocol over six
+extraction strategies, in which layout-aware and vision-language extraction
+are retained and general-purpose detector--recogniser pipelines are rejected
+on Devanagari conjunct handling rather than on aggregate accuracy. Second, a
+single chunk schema that every book-specific converter targets, yielding
+5{,}838 verified chunks and 2{,}708{,}568 tokens under a production
+tokenizer, of which 51.87\% are Sanskrit, 45.67\% English and 2.47\% Hindi.
+Third, a per-volume failure analysis that attributes each gap in coverage to a
+specific, named extraction defect --- Hindi-only commentary, degraded
+Devanagari, absent verse fields, a single catastrophic recognition failure,
+and cross-volume identifier collision --- rather than to source quality in
+aggregate. Fourth, a fact-centric synthesis procedure that reduces each chunk
+to discrete facts and renders each fact into every examination format it
+supports, producing 80{,}000 questions over six formats from 35{,}016 facts
+with no generative model in the answer path, and therefore no possibility of
+a hallucinated answer. We additionally report a paired model-selection study
+over four instruction-tuned candidates that identifies both a preferred
+fine-tuning base and two question formats on which no candidate exceeds
+chance.
+\end{abstract}
+
+% =====================================================================
+\section{Introduction}
+
+Ayurveda is a codified medical tradition whose primary sources are a small,
+stable set of Sanskrit treatises. A practising physician reasons from a
+symptom, a drug or a disease name; the literature is organised by verse
+number within chapter within section. The two do not meet. A physician who
+wishes to know what the tradition says about a presenting symptom must
+already know which verse to look up, which is precisely the knowledge the
+lookup was meant to supply.
+
+Making these texts machine-searchable is not primarily a modelling problem.
+It is a problem of getting the text off the page correctly, and of deciding
+what the unit of retrieval should be. Both are harder than they appear.
+Devanagari is a complex script in which stacked conjunct consonants, vowel
+signs positioned above, below and beside their base glyph, and the connecting
+headline interact in ways that general-purpose recognisers handle
+poorly~\cite{devaocr}. Sanskrit compounds these difficulties: the same
+printed page may carry verse in Devanagari, its romanisation in IAST, and a
+commentary that is itself in Sanskrit, Hindi or English. Editions disagree on
+all of it.
+
+The unit question is equally consequential. A verse without its commentary is
+often uninterpretable; a commentary block without its verse cannot be cited.
+We therefore treat the pair --- verse together with its gloss and its
+position in the text --- as the atomic record, and require every downstream
+stage to operate on that record rather than on undifferentiated text.
+
+A further difficulty arises once the corpus exists. Instruction tuning
+requires supervised examples that a corpus of primary sources does not
+natively contain, and the standard remedy is to generate them with a language
+model. In a medical domain this is a poor trade. A teacher model that
+hallucinates a detail does not produce a noisy label; it produces a confident
+false label that becomes the student's ground truth~\cite{attrground}. We
+consider this unacceptable for a corpus whose purpose is to tell a clinician
+what a classical text actually says, and we therefore constrain synthesis so
+that every answer is lifted verbatim from a source chunk.
+
+This paper makes the following contributions.
+
+\begin{itemize}\itemsep2pt
+\item \textbf{An OCR selection protocol for Indic scriptural material}
+(Sec.~\ref{sec:ocr}). We evaluate six extraction strategies and report which
+were accepted and which rejected, with the failure mode that decided each.
+The deciding criterion is conjunct and matra fidelity on verse, not aggregate
+page accuracy.
+
+\item \textbf{A single chunk schema and its enforcement}
+(Sec.~\ref{sec:schema}). Every book-specific converter targets one contract,
+so that irregularity is absorbed at extraction time rather than propagated.
+We also report a cross-volume identifier collision that per-file validation
+cannot detect.
+
+\item \textbf{A per-volume failure analysis} (Sec.~\ref{sec:failure}).
+We attribute each coverage gap to a specific defect with the evidence that
+identifies it, and show that token fertility functions as a diagnostic for
+recognition quality.
+
+\item \textbf{A fact-centric, hallucination-free instruction corpus}
+(Sec.~\ref{sec:synthesis}) of 80{,}000 questions over six formats, together
+with a paired model-selection study (Sec.~\ref{sec:selection}) that
+identifies a fine-tuning base and quantifies where current models fail.
+\end{itemize}
+
+% =====================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Document conversion and OCR}
+
+Modern document conversion has moved away from the classical
+detect-then-recognise cascade toward systems that model page structure
+explicitly. PP-OCR~\cite{ppocr} is representative of the cascade approach and
+optimises it aggressively for deployment, reaching a 3.5\,MB recognition
+model for 6{,}622 Chinese characters through a sequence of size-reduction
+strategies; PP-OCRv2~\cite{ppocrv2} extends this with a further set of
+training refinements. This lineage is fast and well-engineered, but its
+segmentation assumptions are inherited from scripts whose glyphs do not stack
+vertically.
+
+Docling~\cite{docling,doclingtr} takes the structural view, parsing documents
+into a unified representation using dedicated layout-analysis and
+table-structure models, and is explicitly designed to run within a small
+resource budget on commodity hardware. Surya~\cite{surya} folds layout
+analysis, reading-order detection, table recognition and text recognition
+into a single vision--language model covering over ninety languages, and
+Marker~\cite{marker} uses Surya as its recognition backend while targeting
+whole-document conversion to structured Markdown or JSON. The trend these
+represent --- from pipeline to end-to-end vision--language model --- is
+directly relevant to scriptural material, where the correct reading of a
+glyph often depends on layout context that a cropped line image discards.
+
+Devanagari recognition has its own literature. Surveys of the
+area~\cite{devaocr} identify conjunct consonants, dependent vowel signs and
+the connecting headline as the persistent failure points, and recent
+stress-testing of vision--language OCR systems on Devanagari~\cite{devavlm}
+confirms that these remain unsolved even for models that perform well on
+Latin and CJK text. Work specific to Sanskrit manuscripts~\cite{sanskritdl}
+notes the additional problem that the effective character inventory is
+unusually large once compound characters are counted. Our own findings in
+Sec.~\ref{sec:failure} are consistent with this: the volume in our corpus
+with the worst recognition quality fails precisely by losing conjuncts and
+detaching matras.
+
+\subsection{Domain and language adaptation}
+
+Adapting general models to low-resource languages and to specialist domains
+is typically approached through continued pre-training, and empirical studies
+of this for Indic languages~\cite{cpt-indic} examine the interaction between
+corpus size and vocabulary extension. Surveys of South Asian language
+resources~\cite{bhaasha} document how thin the available data remains for
+most of these languages, which is the condition our corpus construction
+operates under.
+
+The most direct precedent for this work is AyurParam~\cite{ayurparam}, a
+bilingual model specialised to Ayurveda, evaluated on the
+BhashaBench~\cite{bhashabench} suite. That work and ours differ in the unit
+of grounding: AyurParam is trained on page-level question--answer pairs
+generated across a large book collection, whereas we ground at the level of
+the individual verse and its commentary, with an explicit provenance chain
+back to the printed page. We treat AyurParam as the reference point against
+which our fine-tuned model must be measured (Sec.~\ref{sec:ayurparam}).
+Broader Indic evaluation suites~\cite{parambench,indicparam} provide
+complementary coverage at graduate level and across low-resource Indic
+languages.
+
+\subsection{Synthetic instruction data}
+
+Bootstrapping instruction data from a model's own generations is now standard
+practice, and subsequent work has concentrated on raising diversity and
+difficulty while controlling quality. Attributed grounding~\cite{attrground}
+anchors each generated instruction to retrieved source material precisely to
+limit fabrication, and answer-consistency filtering~\cite{cotself} curates
+generated data by checking that independently sampled reasoning paths agree.
+Seed-free frameworks~\cite{seedfree} address the case where no in-language
+instruction seed set exists, which is the situation for Sanskrit.
+
+Our position is more conservative than any of these. Rather than generating
+answers and then filtering, we do not generate answers at all: every answer
+in our instruction corpus is a verbatim span of a source chunk, and the
+generative step is confined to selecting which span to ask about and in which
+examination format. This forfeits the linguistic variety that a teacher model
+would supply --- a limitation we quantify in Sec.~\ref{sec:limitations} ---
+in exchange for the guarantee that no answer can be false with respect to the
+source.
+
+% =====================================================================
+\section{Corpus Construction}
+\label{sec:corpus}
+
+\subsection{Source material}
+
+The corpus is drawn from eight printed volumes selected in consultation with
+practising physicians, spanning the canonical divisions of the literature:
+the \emph{Brihattrayi} (Charaka Samhita, Sushruta Samhita, Ashtanga Hridaya)
+and the \emph{Laghutrayi} (Sharangadhara Samhita, Madhava Nidana,
+Bhavaprakasha Nighantu), together with a two-volume edition of Madhava
+Nidanam carrying the Madhukosa commentary.
+
+The eight volumes differ in every respect that matters to an extraction
+pipeline: in script mix, in whether transliteration is printed at all, in
+whether the commentary is English or Hindi, in scan quality, and in whether
+verse and commentary occupy separate columns or a single measure. No single
+extraction configuration succeeds across all eight. This is the premise of
+the engine selection described next, and the cause of the failures analysed
+in Sec.~\ref{sec:failure}.
+
+\subsection{OCR engine selection}
+\label{sec:ocr}
+
+Extraction was treated as a per-volume engineering problem. Six strategies
+were evaluated. The deciding criterion was not aggregate page accuracy but
+fidelity on Devanagari verse specifically: whether conjunct consonants
+survive intact and whether dependent vowel signs remain attached to the
+correct base glyph. A page can score well on character accuracy while
+rendering every verse on it unusable, because the commentary is long and the
+verse is short.
+
+\paragraph{Accepted.}
+\textbf{\ocrfinal{}} was adopted as the final configuration. Quantisation was
+a hard requirement rather than an optimisation: extraction ran on a single
+local accelerator with approximately 6\,GB of usable memory, which precludes
+full-precision inference over multi-hundred-page volumes. GGUF-quantised
+vision--language models are explicitly built for this
+regime~\cite{lfm2vl}. \textbf{Surya}~\cite{surya} was accepted for
+verse-dominant pages, where its unified treatment of layout and recognition
+preserved reading order across interleaved verse and commentary.
+\textbf{Marker}~\cite{marker} was accepted where the printed page carried a
+stable heading hierarchy that could be mapped onto the schema's chapter and
+section fields. \textbf{Docling}~\cite{docling} was accepted where verse and
+commentary occupied physically distinct page regions, its layout model
+being able to keep them apart. \textbf{Explicit bounding-box extraction} was
+retained as a fallback for columns that the general-purpose converters
+merged.
+
+\paragraph{Rejected.}
+\textbf{PaddleOCR / PP-OCR}~\cite{ppocr,ppocrv2} was rejected. Its
+detect-then-recognise cascade segments text into line and character regions
+before recognition, and this assumption is a poor fit for stacked conjuncts,
+where the correct unit is neither a character box nor a clean horizontal
+line. The engine is otherwise the most deployment-efficient of those
+evaluated, and the rejection is specific to the script rather than a
+judgement on the system. \textbf{Markitdown} was rejected as a primary
+extractor: it is a format converter rather than a recogniser and produced
+usable output only where the source PDF already carried a text layer, which
+was not the case for the scanned volumes.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Engine} & \textbf{Role} & \textbf{Decision} \\
+\midrule
+\ocrfinal{}          & Final extractor, all volumes & Accepted \\
+Surya~\cite{surya}   & Verse-dominant pages         & Accepted \\
+Marker~\cite{marker} & Stable heading hierarchy     & Accepted \\
+Docling~\cite{docling} & Separated page regions     & Accepted \\
+Bounding-box         & Merged-column fallback       & Accepted \\
+PP-OCR~\cite{ppocr}  & Conjunct segmentation        & Rejected \\
+Markitdown           & No text layer present        & Rejected \\
+\bottomrule
+\end{tabular}
+\caption{Extraction strategies evaluated, with the role each was assigned or
+the failure mode that excluded it.}
+\label{tab:ocr-decision}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Engine} & \textbf{CER} & \textbf{WER} & \textbf{Conj.\ err.} & \textbf{p/min} \\
+\midrule
+\ocrfinal{}   & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{--} \\
+Surya         & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{--} \\
+Marker        & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{--} \\
+Docling       & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{--} \\
+Bounding-box  & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{--} \\
+PP-OCR        & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{--} \\
+Markitdown    & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{--} \\
+\bottomrule
+\end{tabular}
+\caption{Measured extraction quality on the held-out transcription set.
+Character error rate, word error rate, conjunct-specific error rate and
+throughput in pages per minute.}
+\label{tab:ocr-stats}
+\end{table}
+
+\gap{OCR measurements for Table~\ref{tab:ocr-stats}}{%
+Supply per-engine CER, WER, conjunct-specific error rate and pages per
+minute, plus peak memory if available. Also state the ground-truth protocol:
+how many pages were manually transcribed, from which volumes, and how they
+were sampled. Until these are filled the accept/reject decisions in
+Sec.~\ref{sec:ocr} rest on qualitative failure modes only, which a reviewer
+will challenge.}
+
+Extraction was made resumable. Process isolation and per-page checkpointing
+ensured that a crash partway through a volume did not discard completed
+pages, which within a 6\,GB budget is a routine occurrence rather than an
+exceptional one.
+
+\subsection{The chunk schema}
+\label{sec:schema}
+
+Every book-specific converter targets one common contract. This is the
+central design decision of the corpus: converters absorb the irregularity of
+the printed page so that all downstream stages --- tokenization, embedding,
+question synthesis, evaluation --- operate on a single uniform record type.
+The base schema is: \texttt{chunk\_id}; \texttt{sthana},
+\texttt{chapter\_number} and \texttt{chapter\_title} locating the record in
+the volume; \texttt{verse\_id} as printed; \texttt{topic\_heading}, the
+editorial heading under which the verse appears; \texttt{sanskrit\_text},
+the Devanagari verse; \texttt{transliteration}, the IAST romanisation where
+the edition prints one; \texttt{commentary}, the prose gloss retained
+verbatim; and \texttt{categories\_found} with \texttt{primary\_category},
+domain keyword tags used for filtering and downstream domain assignment.
+
+Three volumes required schema extension rather than being forced into the
+base contract. Sharangadhara Samhita carries
+\texttt{commentary\_english}, because its printed commentary is Hindi and an
+English rendering had to be produced separately. Madhava Nidana (Laghutrayi)
+carries \texttt{sanskrit\_commentary}, \texttt{source\_citation} and
+\texttt{record\_type}, because its Madhukosa apparatus quotes other treatises
+by name and the citation must be preserved. Charaka Samhita carries
+\texttt{pada}, marking the quarter-division of its Chikitsasthana chapters.
+Retaining these as named fields rather than flattening them into
+\texttt{commentary} is what makes the failure analysis of
+Sec.~\ref{sec:failure} possible at all.
+
+\subsection{Identifier integrity}
+
+\texttt{chunk\_id} is unique within a volume but not across the corpus.
+Madhava Nidanam Part 1 and Part 2 were converted independently and both
+number their records \texttt{MN1}, \texttt{MN2}, and so on; 102 identifiers
+collide between the two volumes. Any join keyed on \texttt{chunk\_id} alone
+therefore silently double-counts. All analysis in this paper keys on the
+composite \texttt{(source\_book, chunk\_id)}. We report this because it is
+invisible to per-volume validation --- each file is internally consistent ---
+and surfaces only when the corpus is treated as a whole.
+
+% =====================================================================
+\section{Corpus Characterisation}
+\label{sec:characterisation}
+
+\subsection{Tokenization}
+
+The corpus was tokenized with the \texttt{google/gemma-3-4b-it} tokenizer,
+chosen because it belongs to a model family in the deployment size class
+under consideration. Measuring token counts under a tokenizer other than the
+one that will be used would misstate every context-window and cost estimate
+that follows.
+
+The corpus totals 2{,}708{,}568 tokens: 1{,}404{,}844 Sanskrit (51.87\%),
+1{,}236{,}881 English (45.67\%) and 66{,}843 Hindi (2.47\%). Devanagari-only
+content accounts for 801{,}705 tokens across 5{,}439 chunks, and
+transliteration-only content for 572{,}022 tokens across 2{,}950 chunks ---
+only about half the corpus carries printed romanisation at all.
+
+\subsection{Token fertility as a quality diagnostic}
+
+Fertility, tokens emitted per whitespace-delimited word, is 3.61 for Sanskrit
+against 1.69 for English, a ratio of 2.14: Sanskrit is more than twice as
+expensive per word under this tokenizer as the English commentary explaining
+it. Fertility is not uniform, ranging from 1.85 in Ashtanga Hridaya to 4.70
+in Sushruta Samhita (Table~\ref{tab:corpus}).
+
+The low Ashtanga figure is not evidence of simpler Sanskrit. It is a symptom.
+Lost conjuncts and detached vowel signs fragment words into shorter,
+tokenizer-friendly pieces, so degraded recognition \emph{lowers} apparent
+fertility. Fertility therefore doubles as a diagnostic for extraction
+quality, and an anomalously low value is a signal to inspect the volume
+rather than a property of its language.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Volume} & \textbf{Chunks} & \textbf{Skt tokens} & \textbf{Fert.} \\
+\midrule
+Charaka Samhita          & 1{,}497 & 379{,}568 & 3.41 \\
+Bhavaprakasha Nighantu   & 1{,}052 & 81{,}372  & 3.69 \\
+Ashtanga Hridaya         & 913     & 38{,}899  & 1.85 \\
+Madhava Nidanam P1       & 728     & 223{,}062 & 4.24 \\
+Sharangadhara Samhita    & 593     & 61{,}766  & 4.43 \\
+Sushruta Samhita         & 418     & 58{,}848  & 4.70 \\
+Madhava Nidana (Laghu.)  & 403     & 259{,}833 & 4.09 \\
+Madhava Nidanam P2       & 234     & 301{,}496 & 4.65 \\
+\midrule
+\textbf{Total}           & \textbf{5{,}838} & \textbf{1{,}404{,}844} & \textbf{3.61} \\
+\bottomrule
+\end{tabular}
+\caption{Per-volume chunk counts, Sanskrit token totals and Sanskrit token
+fertility. The anomalously low Ashtanga fertility is a recognition artefact,
+not a linguistic property (Sec.~\ref{sec:failure}).}
+\label{tab:corpus}
+\end{table}
+
+\subsection{Chunk length and context limits}
+
+Chunk length is heavily skewed. The median is comfortably inside any modern
+context window; the upper tail is not. 21.62\% of chunks (1{,}262) exceed
+512 tokens, 8.56\% (500) exceed 1{,}024, 2.93\% (171) exceed 2{,}048, 0.87\%
+(51) exceed 4{,}096 and 0.15\% (9) exceed 8{,}192.
+
+The skew is also uneven across volumes. Madhava Nidanam Part 2 averages
+1{,}288 Sanskrit tokens per chunk against 43 for Ashtanga Hridaya, a
+thirtyfold difference driven by editorial convention rather than content
+density: Part 2 emits one chunk per commentary block, Ashtanga one per verse.
+Operationally, chunks above the embedding model's context limit must be
+sub-chunked before ingestion or their tails are silently truncated. We treat
+the 512-token threshold as binding, since it governs roughly one chunk in
+five.
+
+\subsection{Script balance}
+
+The ratio of English to Sanskrit tokens per chunk separates the corpus into
+two classes. In Bhavaprakasha Nighantu the mean ratio is 3.85: it is a
+\emph{nighantu}, a materia medica whose substance is prose description of
+drug properties, with verse serving as an index. In Sushruta Samhita the
+ratio is 0.48 and in Madhava Nidanam Part 2 it is 0.46, where verse dominates
+and commentary is terse. Any downstream sampling that treats chunks as
+interchangeable will over-represent pharmacological prose and
+under-represent surgical and diagnostic verse. Sec.~\ref{sec:synthesis}
+returns to this.
+
+% =====================================================================
+\section{Per-Volume Failure Analysis}
+\label{sec:failure}
+
+Aggregate quality statistics conceal the fact that each volume fails
+differently. We report the dominant defect per volume with the evidence that
+identifies it. In every case the defect is an extraction or editorial
+artefact, not absent source content; this was confirmed by returning to the
+printed page.
+
+\paragraph{Sharangadhara Samhita --- Hindi-only commentary.}
+350 of 593 chunks carry no English commentary. The printed commentary is
+Hindi, sharing the Devanagari script with the Sanskrit verse and offering no
+English text to anchor language identification on. The corpus records 560
+chunks with Hindi content totalling 66{,}843 tokens: the entire Hindi mass of
+the corpus originates in this single volume. Character-level translation
+could not reliably separate Hindi commentary from Sanskrit verse and a
+meaning-level pass was required. Only 42.2\% of this volume's chunks carry
+both a verse and usable English commentary, making it the weakest volume for
+any English-language downstream task.
+
+\paragraph{Ashtanga Hridaya --- degraded Devanagari.}
+This volume shows the corpus minimum on both Sanskrit fertility (1.85) and
+mean Sanskrit chunk length (43.51 tokens). Inspection of affected chunks
+identifies the cause: conjunct consonants lost and vowel signs detached from
+their base characters during recognition, fragmenting words into isolated
+glyphs. The text remains legible enough to pass a naive non-empty check while
+being unusable for any task requiring the verse to be read. This defect class
+is invisible to field-coverage metrics, and motivated the explicit Devanagari
+well-formedness test described in Sec.~\ref{sec:controls}.
+
+\paragraph{Bhavaprakasha Nighantu --- absent verse field.}
+370 of 1{,}052 chunks carry no Sanskrit text; the shortest chunks in the
+corpus, at three to four tokens, are from this volume. These are drug
+monograph entries whose printed page carries prose description without an
+accompanying verse. The records are legitimate content but cannot support any
+verse-grounded task.
+
+\paragraph{Charaka Samhita --- catastrophic single-chunk failure.}
+One chunk, \texttt{CS1543}, contains 116{,}187 combined tokens: nine times
+the next largest in the corpus and roughly 4\% of total corpus token mass in
+a single record. Its content is not Ayurvedic text but the volume's back
+matter, rendered by the recognition pass as a long run of fragmentary glyphs
+and page numbers. A single record of this kind distorts every mean it enters,
+raising this volume's English standard deviation to 2{,}558 tokens against a
+median of 110.
+
+\paragraph{Madhava Nidanam Parts 1 and 2 --- identifier collision.}
+The 102 shared identifiers described in Sec.~\ref{sec:schema}. Part 1
+additionally shows 130 of 728 chunks with no English commentary.
+
+\paragraph{Remaining volumes.}
+Sushruta Samhita and Madhava Nidana (Laghutrayi) show no dominant structural
+defect. Sushruta is complete on both fields across all 418 chunks;
+Laghutrayi carries 26 chunks without English commentary out of 403.
+Sushruta's terse commentary --- 66.35 English tokens per chunk, the corpus
+minimum --- is an editorial property of the edition rather than a failure.
+
+% =====================================================================
+\section{Embedding and Retrieval}
+\label{sec:embedding}
+
+Embedding was performed with Harrier OSS over the schema-normalised chunks.
+The retrieval layer is a hybrid of lexical and dense search, so that a
+physician may query either by an exact Sanskrit term or by a plain-language
+description of a symptom, and is served through a search backend with a web
+interface, a REST API and a machine-facing endpoint for programmatic access
+by assistant models.
+
+\gap{Embedding and index configuration}{%
+Needed: embedding model revision and output dimension; whether sub-chunking
+was applied to the 1{,}262 chunks above 512 tokens and with what stride and
+overlap; which schema fields were concatenated to form the embedded text; the
+index configuration including searchable and filterable attributes; and the
+lexical/dense weighting at query time. If retrieval quality was measured,
+supply the query set and metric.}
+
+% =====================================================================
+\section{Instruction Data Synthesis}
+\label{sec:synthesis}
+
+Fine-tuning requires supervised examples the corpus does not natively
+contain. We synthesise them under the constraint motivated in
+Sec.~\ref{sec:related}: every answer must be extracted verbatim from a source
+chunk and remain traceable to it. No generative model participates in
+producing answer content, so no answer can be hallucinated, and any item can
+be audited by returning to its \texttt{(source\_book, chunk\_id)} pair.
+
+\subsection{Fact-centric generation}
+
+Rather than generating questions directly from text, each chunk is first
+reduced to a set of discrete facts, each carrying a stable identifier. A fact
+may be the subject a verse addresses, a statement made in the commentary, a
+technical term the passage turns on, an explicit enumeration or count, a
+synonym set, or the location of a teaching within the volume. Each fact is
+then rendered into every examination format it can support.
+
+This is what allows one answer to be tested as a multiple-choice item, a
+cloze, an assertion--reason pair and a multiple-selection item without any two
+question stems being textually identical, and it makes semantic
+de-duplication possible by grouping on the fact identifier. From 5{,}838
+chunks we extract 35{,}016 distinct facts and render 80{,}000 questions
+across six formats, covering 93.9\% of chunks; 21{,}635 facts (61.8\%) are
+rendered in more than one format. The residual 6.1\% of uncovered chunks are
+those whose only content is Hindi-only commentary or degraded Devanagari, as
+characterised in Sec.~\ref{sec:failure}.
+
+\subsection{Quality controls}
+\label{sec:controls}
+
+Each control below was added in response to a defect observed in generated
+output.
+
+\begin{itemize}\itemsep2pt
+\item \textbf{Distractor isolation.} Incorrect options are drawn from a
+different chapter of the same volume, so a distractor cannot accidentally be
+a true statement about the asked topic.
+\item \textbf{Answer-leakage guards.} An item is rejected if its answer
+appears in the stem outside the option block, or in any context field
+supplied alongside it. Verdict items carry no context at all, since supplying
+the source passage would reveal the verdict.
+\item \textbf{OCR filtering.} Sentences are rejected if they carry running
+heads, spaced-out punctuation, or an anomalous proportion of tokens absent
+from an English lexicon. Verses failing the Devanagari well-formedness test
+motivated in Sec.~\ref{sec:failure} are excluded from cloze and
+verse-comprehension items.
+\item \textbf{Option-order randomisation.} Correct answers are distributed
+uniformly over option positions. An earlier build placed true/false verdicts
+at fixed positions, which would have allowed a model to score on position
+alone across 17\% of the set.
+\end{itemize}
+
+\subsection{Resulting distribution}
+
+The set comprises 20{,}699 fill-in-the-blank items, 18{,}262
+multiple-choice, 15{,}428 short-answer and descriptive, 11{,}430
+assertion--reason, 9{,}089 multiple-selection and 5{,}092 match-the-column.
+Train and validation splits are made on the fact identifier rather than the
+row, so no rendering of a training fact can appear in validation.
+Distribution across volumes is uneven and follows the prose/verse split of
+Sec.~\ref{sec:characterisation}: Bhavaprakasha Nighantu contributes 34.4\% of
+items and Sushruta Samhita 3.0\%.
+
+% =====================================================================
+\section{Base Model Selection}
+\label{sec:selection}
+
+Before fine-tuning we select a base model empirically. A 100-item evaluation
+subset was drawn from the validation split --- 25 items each of
+assertion--reason, multiple-choice, fill-in-the-blank and match-the-column
+--- balanced across all eight volumes and disjoint from the training set.
+Four instruction-tuned candidates in the 2--4B class were scored under
+identical prompting.
+
+All four task types are four-option items, so chance accuracy is 0.25 and raw
+accuracy alone is misleading. We additionally report \emph{format
+compliance}, the proportion of items for which the model emitted a parseable
+answer, because a model that cannot follow the answer format produces a score
+reflecting instruction-following rather than domain knowledge.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Model} & \textbf{Acc.} & \textbf{Lift} & \textbf{Compl.} \\
+\midrule
+Qwen2.5-3B-Instruct     & \textbf{0.510} & +0.260 & 0.99 \\
+Phi-3-mini-4k-instruct  & 0.390 & +0.140 & 0.99 \\
+gemma-2-2b-it           & 0.360 & +0.110 & 1.00 \\
+Llama-3.2-3B-Instruct   & 0.290 & +0.040 & 0.92 \\
+\bottomrule
+\end{tabular}
+\caption{Base model selection over 100 held-out items. Chance accuracy is
+0.25; \emph{Lift} is accuracy above chance; \emph{Compl.} is format
+compliance.}
+\label{tab:selection}
+\end{table}
+
+Because all models answered the same items, differences are tested with a
+paired exact McNemar test rather than by comparing marginal accuracies.
+Qwen2.5-3B-Instruct significantly outperforms gemma-2-2b-it ($p=0.014$) and
+Llama-3.2-3B-Instruct ($p=0.0003$). Its advantage over Phi-3-mini is not
+significant at $n=100$ ($p=0.058$), and the remaining three models are
+mutually indistinguishable. Qwen2.5-3B-Instruct was selected.
+
+Two observations constrain what fine-tuning must achieve. First, no model
+exceeds chance on assertion--reason items, and gemma-2-2b-it falls below it
+at 0.16; match-the-column is at or near chance for all four. These two
+reasoning-heavy formats are where the base models hold no usable prior.
+Second, two models answer by position rather than content --- Llama selects
+option C on 50\% of items and gemma selects D on 41\%, against a key
+distributed 24/30/20/26 --- so part of their apparent score is an artefact of
+key placement. Finally, 29 of the 100 items were solved by no model, and the
+union of all four reaches only 0.71, indicating substantial headroom in the
+benchmark itself.
+
+% =====================================================================
+\section{Model Trimming and Pruning}
+\label{sec:pruning}
+
+Deployment targets a single local accelerator, the same constraint that
+governed extraction. Vocabulary trimming and structured pruning are planned
+ahead of fine-tuning, with quantised export as the deployment artefact.
+
+\gap{Trimming and pruning --- not yet performed}{%
+To complete: vocabulary trimming criterion and retained vocabulary size,
+justified against the Devanagari and IAST coverage required by
+Sec.~\ref{sec:characterisation}; pruning method, granularity and target
+sparsity; parameter count and on-disk size before and after; and the change
+in Table~\ref{tab:selection} accuracy attributable to compression alone,
+measured before any fine-tuning.}
+
+% =====================================================================
+\section{Fine-Tuning Protocol}
+\label{sec:finetune}
+
+Fine-tuning proceeds from the selected base model on the instruction corpus
+of Sec.~\ref{sec:synthesis}, split on the fact identifier. The evaluation
+subset of Sec.~\ref{sec:selection} is held out entirely.
+
+\gap{Fine-tuning --- not yet performed}{%
+To complete: adaptation method and, if low-rank, the rank, scaling factor and
+target modules; learning rate, schedule, epochs, effective batch size and
+sequence length; the sampling policy over the 80{,}000 items, in particular
+whether the Bhavaprakasha over-representation noted in
+Sec.~\ref{sec:synthesis} was corrected; hardware and wall-clock cost; and the
+checkpoint selection criterion.}
+
+% =====================================================================
+\section{Benchmarking Against AyurParam}
+\label{sec:ayurparam}
+
+The reference point for this work is AyurParam~\cite{ayurparam}, evaluated on
+BhashaBench-Ayur~\cite{bhashabench}. Two comparisons are planned. The first
+evaluates our fine-tuned model on our own held-out benchmark alongside
+AyurParam, measuring shloka-level grounding in the eight source volumes. The
+second evaluates our model on the public BhashaBench-Ayur suite, measuring
+whether grounding in primary sources transfers to examination questions
+written independently of our corpus.
+
+The two directions test different claims and we report both. A model tuned on
+our corpus is expected to hold an advantage on the first by construction;
+only the second constitutes evidence of general domain competence.
+
+% =====================================================================
+\section{Implementation and Infrastructure}
+\label{sec:infra}
+
+\subsection{Hugging Face}
+
+The corpus is held as a private Hugging Face dataset repository, serving
+three purposes. It versions the corpus, so a change to a converter produces a
+new revision rather than overwriting the artefact an experiment was run
+against. It provides authenticated access, appropriate while the corpus
+derives from copyrighted printed editions. And it supplies base model weights
+and tokenizers to the evaluation environment through the same interface.
+
+Gated repositories required explicit handling. Several candidates in
+Sec.~\ref{sec:selection} are licence-gated, and access failures surface only
+when the model configuration is fetched, producing an authorisation error
+rather than an informative message. Our harness performs an access preflight
+over the candidate list before any weights are downloaded, and substitutes an
+equivalent ungated mirror where the gate could not be cleared.
+
+\subsection{Kaggle execution}
+
+Model evaluation runs on Kaggle notebook instances with a single T4
+accelerator, which provides free accelerated compute adequate for models in
+the 2--4B class. Three constraints of that environment shaped the harness.
+Sessions are wiped on termination, so results are archived per model and
+downloaded before the session closes. Sessions idle out, so long batches are
+queued in groups. And accelerator memory is not released between models in a
+batch, so the harness explicitly frees weights between candidates; without
+this the second model in a run fails to allocate even where it would fit
+alone.
+
+The harness is distributed as a single self-contained notebook with both the
+scoring engine and the evaluation items embedded, so a run requires no
+attached dataset and no path configuration. Two defects found during
+development are worth recording, as both silently depress scores rather than
+raising an error. Decoder-only models must be left-padded for batched
+generation; under default right-padding, sequences shorter than the batch
+maximum have their continuation generated after a run of padding tokens and
+return empty. And answer extraction must accept the response shapes models
+actually produce --- a letter followed by a newline and a rationale is the
+most common instruct-model output and was initially scored as a non-answer.
+
+\subsection{Reproducibility}
+
+Corpus analysis, question synthesis and evaluation are deterministic and
+seeded; re-running the synthesis pipeline reproduces the 80{,}000-item corpus
+byte-for-byte. Every generated item carries the volume, sthana, chapter,
+verse identifier and chunk identifier of its source.
+
+% =====================================================================
+\section{Experiments}
+\label{sec:experiments}
+
+\gap{Experiments --- reserved}{%
+To be populated once Secs.~\ref{sec:pruning}--\ref{sec:ayurparam} are
+executed. Should consolidate: compression cost; fine-tuning gain per question
+format with paired significance tests as in Sec.~\ref{sec:selection}; the
+AyurParam comparison in both directions; and an ablation isolating which of
+the quality controls in Sec.~\ref{sec:controls} materially affected
+downstream accuracy.}
+
+% =====================================================================
+\section{Limitations}
+\label{sec:limitations}
+
+Three limitations are inherent to the present corpus rather than to the
+pipeline. First, coverage is bounded by extraction quality: the 6.1\% of
+chunks yielding no instruction items are concentrated in Sharangadhara
+Samhita and Ashtanga Hridaya for the reasons given in Sec.~\ref{sec:failure},
+and no downstream processing recovers content the recognition pass did not
+resolve.
+
+Second, question stems are produced from templates. Answers are verbatim
+source text and therefore correct, but a model fine-tuned on templated stems
+may learn the template rather than the content. Paraphrasing stems while
+holding answers and option sets fixed is the natural mitigation and is not
+yet applied.
+
+Third, the instruction corpus is less shloka-centric than the source material
+would suggest. Only 12.3\% of items involve the Sanskrit verse; 81.2\% rest
+on prose commentary alone. This follows from the token distribution of
+Sec.~\ref{sec:characterisation} --- a chunk carries one verse but may carry
+many commentary sentences --- and means a model trained on the full set
+learns commentary comprehension more than verse comprehension. Where verse
+grounding is the objective, the set must be filtered accordingly.
+
+Finally, the selection benchmark of Sec.~\ref{sec:selection} comprises 100
+items, sufficient to separate the best candidate from the weakest but not to
+separate adjacent candidates, as the non-significant Qwen--Phi-3 comparison
+shows.
+
+% =====================================================================
+\section{Conclusion}
+
+\gap{Conclusion --- reserved}{%
+Write last, once Sec.~\ref{sec:experiments} carries results.}
+
+% =====================================================================
+{\small
+% NOTE: no \bibliographystyle here on purpose. The references below are a
+% manual thebibliography, so BibTeX never runs. Declaring ieee_fullname would
+% make Overleaf's latexmk look for ieee_fullname.bst, which ships only with
+% the official CVPR template and is not in a stock TeX Live installation.
+\begin{thebibliography}{99}\itemsep2pt
+
+\bibitem{surya}
+Datalab.
+\newblock Surya: OCR, layout analysis, reading order and table recognition in
+  90+ languages.
+\newblock \url{https://github.com/datalab-to/surya}.
+
+\bibitem{marker}
+V.~Paruchuri and Datalab.
+\newblock Marker: convert PDF to markdown and JSON with high accuracy.
+\newblock \url{https://github.com/datalab-to/marker}.
+
+\bibitem{docling}
+N.~Livathinos, C.~Auer, et~al.
+\newblock Docling: an efficient open-source toolkit for AI-driven document
+  conversion.
+\newblock {\em arXiv:2501.17887}, 2025.
+
+\bibitem{doclingtr}
+C.~Auer, et~al.
+\newblock Docling technical report.
+\newblock {\em arXiv:2408.09869}, 2024.
+
+\bibitem{ppocr}
+Y.~Du, C.~Li, R.~Guo, X.~Yin, W.~Liu, J.~Zhou, Y.~Bai, Z.~Yu, Y.~Yang,
+  Q.~Dang, and H.~Wang.
+\newblock PP-OCR: a practical ultra lightweight OCR system.
+\newblock {\em arXiv:2009.09941}, 2020.
+
+\bibitem{ppocrv2}
+Y.~Du, et~al.
+\newblock PP-OCRv2: bag of tricks for ultra lightweight OCR system.
+\newblock {\em arXiv:2109.03144}, 2021.
+
+\bibitem{lfm2vl}
+Liquid AI.
+\newblock LFM2-VL: efficient vision-language models.
+\newblock \url{https://www.liquid.ai/blog/lfm2-vl-efficient-vision-language-models}.
+
+\bibitem{devaocr}
+A comprehensive survey of OCR for Devanagari script based languages.
+\newblock \TBD{complete authors/venue}.
+
+\bibitem{devavlm}
+Can OCR-VLMs read Devanagari? A stress-test benchmark and post-correction
+  study.
+\newblock {\em arXiv:2606.29213}.
+
+\bibitem{sanskritdl}
+A systematic framework for Sanskrit character recognition using deep learning.
+\newblock {\em ELCVIA}, 24(2), 2025.
+
+\bibitem{ayurparam}
+M.~Nauman, S.~Gvm, V.~Devane, S.~Pawar, V.~Thakur, K.~Pundalik, P.~Sawarkar,
+  R.~Saluja, M.~Desarkar, and G.~Ramakrishnan.
+\newblock AyurParam: a state-of-the-art bilingual language model for Ayurveda.
+\newblock {\em arXiv:2511.02374}, 2025.
+
+\bibitem{bhashabench}
+V.~Devane, M.~Nauman, B.~Patel, et~al.
+\newblock BhashaBench V1: a comprehensive benchmark for the quadrant of Indic
+  domains.
+\newblock {\em arXiv:2510.25409}, 2025.
+
+\bibitem{parambench}
+ParamBench: a graduate-level benchmark for evaluating LLM understanding on
+  Indic subjects.
+\newblock {\em arXiv:2508.16185}, 2025.
+
+\bibitem{indicparam}
+IndicParam: benchmark to evaluate LLMs on low-resource Indic languages.
+\newblock {\em arXiv:2512.00333}, 2025.
+
+\bibitem{cpt-indic}
+Adapting multilingual LLMs to low-resource languages using continued
+  pre-training and synthetic corpus.
+\newblock {\em arXiv:2410.14815}, 2024.
+
+\bibitem{bhaasha}
+Bhaasha, Bhasa, Zaban: a survey for low-resourced languages in South Asia ---
+  current stage and challenges.
+\newblock {\em arXiv:2509.11570}, 2025.
+
+\bibitem{attrground}
+From real to synthetic: synthesizing millions of diversified and complicated
+  user instructions with attributed grounding.
+\newblock {\em arXiv:2506.03968}, 2025.
+
+\bibitem{cotself}
+CoT-Self-Instruct: building high-quality synthetic data for reasoning and
+  non-reasoning tasks.
+\newblock {\em arXiv:2507.23751}, 2025.
+
+\bibitem{seedfree}
+Seed-free synthetic data generation framework for instruction-tuning LLMs: a
+  case study in Thai.
+\newblock {\em arXiv:2411.15484}, 2024.
+
+\end{thebibliography}
+}
+
+\end{document}
