@@ -1,0 +1,533 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Builds qwen_generate_80k.ipynb --- the Kaggle/Colab notebook that generates the
+corpus with Qwen2.5-7B-Instruct.
+
+    python build_generation_notebook.py qwen_generate_80k.ipynb
+"""
+import json
+import sys
+
+C = []
+
+
+def md(src):
+    C.append({"cell_type": "markdown", "metadata": {},
+              "source": src.rstrip("\n").split("\n")})
+
+
+def code(src):
+    C.append({"cell_type": "code", "execution_count": None, "metadata": {},
+              "outputs": [], "source": src.rstrip("\n").split("\n")})
+
+
+md(r"""# AyurShloka-QA v3 --- 80,000 questions with Qwen2.5-7B-Instruct
+
+Generates an Ayurvedic question corpus from eight classical treatises, in the
+BhashaBench-Ayur schema, ready for the downstream pipeline (quality gate -> dedup
+-> AyurParam matching -> splits -> leakage audit).
+
+**Runtime.** Kaggle T4 x2 or P100, roughly 6-9 hours for 80k. The loop
+checkpoints every batch, so a 9-hour session limit is not a problem: re-run the
+notebook and it resumes from `checkpoint.jsonl`.
+
+**Inputs.** The eight `FINAL_*.jsonl` chunk files, added as a Kaggle dataset.
+
+**Output.** `master_80k_qwen.jsonl` --- one JSON object per question, same schema
+as the v2 corpus, so every downstream script runs unchanged.
+
+### Why the design is what it is
+
+*Facts first, formats second.* Each source chunk is reduced to discrete facts,
+then each fact is rendered into several question formats. That is what lets one
+answer legitimately appear as an MCQ, a cloze and an assertion item without the
+stems being duplicates --- and it gives every row a `fact_id`, which the splitter
+needs to stop a fact straddling train and test.
+
+*Distractors come from the same treatise.* Wrong options are drawn from sibling
+chunks of the same book, so they are plausible rather than absurd. A distractor
+pulled from a different domain makes the item solvable by elimination with no
+Ayurvedic knowledge at all, which is worse than useless for fine-tuning.
+
+*Everything is validated after generation.* An LLM asked for JSON will sometimes
+return prose, repeat an option, or mark an answer that is not in the option list.
+Those rows are repaired where possible and dropped otherwise. The reject counter
+is printed so you see the real yield rather than a flattering one.""")
+
+md("## 1 - Environment")
+
+code(r"""!pip -q install "vllm==0.6.3" 2>/dev/null || pip -q install "transformers>=4.44" accelerate bitsandbytes
+import subprocess
+print(subprocess.run(["nvidia-smi","--query-gpu=name,memory.total","--format=csv,noheader"],
+                     capture_output=True, text=True).stdout)""")
+
+code(r'''import os, json, re, random, hashlib, time, unicodedata
+from collections import Counter, defaultdict
+
+SEED        = 20260730
+MODEL       = "Qwen/Qwen2.5-7B-Instruct"
+IN_DIR      = "/kaggle/input/ayur-books"          # the 8 FINAL_*.jsonl live here
+OUT_DIR     = "/kaggle/working/ayur_qwen"
+TARGET      = 80_000
+HINDI_SHARE = 0.375          # mirrors BhashaBench-Ayur: 5,615 of 14,963
+BATCH       = 32
+MAX_NEW     = 640
+TEMPERATURE = 0.7
+TOP_P       = 0.9
+
+os.makedirs(OUT_DIR, exist_ok=True)
+random.seed(SEED)
+
+BOOKS = [
+    ("FINAL_Charaka_Samhita.jsonl",            "Charaka Samhita",             "CS"),
+    ("FINAL_Sushruta_Samhita.jsonl",           "Sushruta Samhita",            "SU"),
+    ("FINAL_Ashtanga_Hridaya.jsonl",           "Ashtanga Hridaya",            "AH"),
+    ("FINAL_Sharangadhara_Samhita.jsonl",      "Sharangadhara Samhita",       "SG"),
+    ("FINAL_B01_Bhavaprakasha_Nighantu.jsonl", "Bhavaprakasha Nighantu",      "BPN"),
+    ("FINAL_B02_Madhavanidanam_Part1.jsonl",   "Madhava Nidanam (Part 1)",    "MN1"),
+    ("FINAL_B03_Madhavanidanam_Part2.jsonl",   "Madhava Nidanam (Part 2)",    "MN2"),
+    ("FINAL_Madhava_Nidana_LaghuTrayi.jsonl",  "Madhava Nidana (Laghutrayi)", "MNL"),
+]
+
+TYPES = ["MCQ", "Fill in the blanks", "Multiple selection",
+         "Assertion or Reasoning", "Match the column", "Assorted"]
+
+# MCQ is weighted up because BhashaBench-Ayur is 98.4% MCQ, but the other formats
+# stay well represented so the model does not overfit to one question shape.
+TYPE_MIX = {"MCQ": 0.30, "Fill in the blanks": 0.22, "Assorted": 0.16,
+            "Assertion or Reasoning": 0.14, "Multiple selection": 0.10,
+            "Match the column": 0.08}
+
+SHORT = {"MCQ": "MCQ", "Fill in the blanks": "FIB", "Multiple selection": "MS",
+         "Assertion or Reasoning": "AR", "Match the column": "MTC", "Assorted": "ASR"}
+
+DOMAIN = {
+    "disease_treatment":     "Kayachikitsa (General Medicine & Internal Medicine in Ayurveda)",
+    "dravyaguna":            "Dravyaguna & Bhaishajya",
+    "ayurveda_fundamentals": "Samhita & Siddhanta (Fundamentals)",
+    "sharir":                "Sharir (Anatomy & Physiology)",
+    "panchakarma":           "Panchakarma & Rasayana",
+    "stri_roga":             "Stri Roga & Prasuti Tantra (Gynecology & Obstetrics)",
+    "shalakya":              "Shalakya Tantra (ENT, Eye, Dentistry)",
+    "kaumarbhritya":         "Kaumarbhritya & Pediatrics",
+    "agad_tantra":           "Agad Tantra & Forensic Medicine",
+    "shalya":                "Shalya Tantra (Surgery)",
+    "swasthavritta":         "Swasthavritta & Public Health",
+}
+print("config ok")''')
+
+md(r"""## 2 - Load the source chunks
+
+Chunks with under 120 characters of commentary are skipped. A question generated
+from a bare Sanskrit line with no gloss has nothing to be graded against.""")
+
+code(r'''def clean(s):
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(s or ""))).strip()
+
+chunks = []
+for fname, book, codeid in BOOKS:
+    p = os.path.join(IN_DIR, fname)
+    if not os.path.exists(p):
+        print("MISSING", p); continue
+    n = 0
+    for line in open(p, encoding="utf-8"):
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        comm = clean(r.get("commentary"))
+        if len(comm) < 120:
+            continue
+        chunks.append({
+            "chunk_id": r.get("chunk_id"), "book": book, "code": codeid,
+            "sthana": clean(r.get("sthana")),
+            "chapter_number": r.get("chapter_number"),
+            "chapter_title": clean(r.get("chapter_title")),
+            "verse_id": clean(r.get("verse_id")),
+            "topic_heading": clean(r.get("topic_heading")),
+            "sanskrit": clean(r.get("sanskrit_text")),
+            "commentary": comm,
+            "primary_category": r.get("primary_category") or "ayurveda_fundamentals",
+        })
+        n += 1
+    print("%-28s %5d usable chunks" % (book, n))
+
+print("\ntotal usable chunks:", len(chunks))''')
+
+md(r"""## 3 - Facts
+
+A chunk's commentary is split into sentence-level facts, each with a stable
+`fact_id` derived from the chunk id and position, so re-running produces the same
+ids and the corpus stays diffable.
+
+How many questions a fact earns depends on how much source text stands behind it
+--- a two-line gloss does not support six distinct questions.""")
+
+code(r'''SENT = re.compile(r"(?<=[.!?।])\s+")
+
+def facts_of(ch):
+    out, seen = [], set()
+    for i, s in enumerate(SENT.split(ch["commentary"])):
+        s = s.strip()
+        if len(s) < 60 or len(s) > 900:
+            continue
+        k = s[:80].lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append({"fact_id": "%s::%s::F%02d" % (ch["code"], ch["chunk_id"], i),
+                    "text": s, "chunk": ch,
+                    "richness": len(ch["commentary"]) + len(ch["sanskrit"])})
+    return out
+
+ALL_FACTS = []
+for ch in chunks:
+    ALL_FACTS.extend(facts_of(ch))
+random.shuffle(ALL_FACTS)
+print("facts:", len(ALL_FACTS))
+
+def quota(f):
+    r = f["richness"]
+    return 1 if r < 400 else 2 if r < 900 else 3 if r < 1800 else 4
+
+planned = sum(quota(f) for f in ALL_FACTS)
+print("questions the fact pool supports:", planned, "| target:", TARGET)
+if planned < TARGET:
+    print("WARNING: pool smaller than target --- raise quota() or lower TARGET")''')
+
+md(r"""## 4 - Prompts
+
+One prompt per (format, language), each asking for a single JSON object and
+showing the exact shape. Two rules appear in every prompt and matter more than
+they look:
+
+- **The question must stand on its own.** No "according to the passage above" ---
+  at inference time there is no passage. Items that lean on invisible context are
+  unanswerable and teach the model to hallucinate a source.
+- **Distractors must be wrong but plausible.** They are supplied from sibling
+  chunks of the same treatise rather than invented, so they are real Ayurvedic
+  content that happens not to be the answer.""")
+
+code(r'''def citation(ch):
+    v = (", verse %s" % ch["verse_id"]) if ch["verse_id"] else ""
+    return "%s - %s, Chapter %s%s" % (ch["book"], ch["sthana"] or "-",
+                                      ch["chapter_number"], v)
+
+RULES_EN = """Rules you must follow:
+- The question must be answerable without seeing any passage. Never write "according to the passage above", "in the given text", or anything similar.
+- Name the treatise and chapter inside the question so it is self-contained.
+- Exactly one option is correct unless the format says otherwise.
+- Wrong options must be plausible Ayurvedic content, not nonsense.
+- Do not reveal the answer inside the question.
+- Reply with ONE JSON object and nothing else. No markdown fence, no commentary."""
+
+RULES_HI = """नियम जिनका पालन अनिवार्य है:
+- प्रश्न बिना कोई गद्यांश देखे उत्तर देने योग्य होना चाहिए।
+- प्रश्न में ग्रंथ और अध्याय का नाम दें।
+- जब तक प्रारूप अन्यथा न कहे, ठीक एक विकल्प सही होगा।
+- गलत विकल्प भी विश्वसनीय आयुर्वेदिक सामग्री हों।
+- प्रश्न में उत्तर प्रकट न करें।
+- केवल एक JSON ऑब्जेक्ट लौटाएँ।"""
+
+SCHEMA = '{"question": "...", "option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", "correct_answer": "A", "answer_text": "...", "explanation": "..."}'
+SCHEMA_MS = '{"question": "...", "option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", "option_e": "...", "correct_answer": "A,C", "answer_text": "...", "explanation": "..."}'
+
+TASK = {
+ "MCQ": ("Write ONE multiple-choice question with four options testing this fact.", SCHEMA),
+ "Fill in the blanks": ("Write ONE fill-in-the-blank question: mask a key term with [X] and give four candidate terms as options.", SCHEMA),
+ "Multiple selection": ("Write ONE multiple-selection question with five options where TWO or THREE are correct. Put every correct letter in correct_answer, comma separated.", SCHEMA_MS),
+ "Assertion or Reasoning": ('Write ONE assertion-reason item. Put Assertion (A) and Reason (R) inside "question". The four options must be the standard set: both true and R explains A; both true but R does not explain A; A true R false; A false R true.', SCHEMA),
+ "Match the column": ('Write ONE match-the-column item. Put List-I (three entries i-iii) and List-II (three entries a-c) inside "question". The four options must be different pairings such as "i-a, ii-b, iii-c".', SCHEMA),
+ "Assorted": ('Write ONE true/false question. The statement goes in "question"; the options must be True, False, Partially true, Cannot be determined.', SCHEMA),
+}
+
+def build_prompt(fact, qtype, lang, pool):
+    ch = fact["chunk"]
+    task, schema = TASK[qtype]
+    rules = RULES_EN if lang == "en" else RULES_HI
+    langline = ("Write the question and all options in English." if lang == "en"
+                else "प्रश्न और सभी विकल्प हिन्दी (देवनागरी) में लिखें।")
+    pool_txt = "\n".join("- %s" % d[:140] for d in pool[:6])
+    return [
+        {"role": "system",
+         "content": "You are an Ayurvedic scholar writing examination questions for an "
+                    "Indian BAMS syllabus. You are precise about sources and never "
+                    "invent citations."},
+        {"role": "user",
+         "content": "Source: %s\nTopic: %s\nSanskrit: %s\n\nFact to test:\n%s\n\n"
+                    "Plausible wrong material from the same treatise (use for distractors):\n%s\n\n"
+                    "%s\n%s\n\n%s\n\nReturn exactly this JSON shape:\n%s"
+                    % (citation(ch), ch["topic_heading"] or ch["chapter_title"],
+                       ch["sanskrit"][:400], fact["text"][:700], pool_txt,
+                       task, langline, rules, schema)},
+    ]
+
+print(build_prompt(ALL_FACTS[0], "MCQ", "en", ["example distractor"])[1]["content"][:700])''')
+
+md(r"""## 5 - Model
+
+vLLM if available --- roughly 5x the throughput of plain `transformers` at this
+batch size, which is the difference between a 7-hour run and a 30-hour one. Falls
+back to 4-bit transformers automatically.""")
+
+code(r'''USE_VLLM = False
+try:
+    from vllm import LLM, SamplingParams
+    llm = LLM(model=MODEL, dtype="half", gpu_memory_utilization=0.90,
+              max_model_len=3072, trust_remote_code=True)
+    tok = llm.get_tokenizer()
+    sampling = SamplingParams(temperature=TEMPERATURE, top_p=TOP_P,
+                              max_tokens=MAX_NEW, seed=SEED)
+    USE_VLLM = True
+    print("vLLM ready")
+except Exception as e:
+    print("vLLM unavailable (%s); using transformers 4-bit" % type(e).__name__)
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+    tok = AutoTokenizer.from_pretrained(MODEL, trust_remote_code=True)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    tok.padding_side = "left"
+    bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16,
+                             bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL, quantization_config=bnb, device_map="auto", trust_remote_code=True)
+    model.eval()
+    print("transformers ready")
+
+
+def generate(batch_msgs):
+    texts = [tok.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
+             for m in batch_msgs]
+    if USE_VLLM:
+        return [o.outputs[0].text for o in llm.generate(texts, sampling)]
+    import torch
+    enc = tok(texts, return_tensors="pt", padding=True, truncation=True,
+              max_length=2560).to(model.device)
+    with torch.no_grad():
+        out = model.generate(**enc, max_new_tokens=MAX_NEW, do_sample=True,
+                             temperature=TEMPERATURE, top_p=TOP_P,
+                             pad_token_id=tok.pad_token_id)
+    return [tok.decode(o[enc["input_ids"].shape[1]:], skip_special_tokens=True)
+            for o in out]''')
+
+md(r"""## 6 - Parse and validate
+
+Every generation is checked before it is kept. The counters printed at the end
+are the honest yield --- a reject rate above roughly 15% is a prompt problem, not
+noise, and is worth fixing before committing to a 9-hour run.""")
+
+code(r'''LETTERS = ["a", "b", "c", "d", "e"]
+BAD_CONTEXT = re.compile(
+    r"(according to the (above|given|following) (passage|text|verse)"
+    r"|in the (above|given) (passage|text)"
+    r"|उपरोक्त गद्यांश)", re.I)
+
+REJECT = Counter()
+
+def extract_json(raw):
+    raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip()
+    i, j = raw.find("{"), raw.rfind("}")
+    if i < 0 or j <= i:
+        return None
+    try:
+        return json.loads(raw[i:j + 1])
+    except json.JSONDecodeError:
+        try:
+            return json.loads(re.sub(r",\s*([}\]])", r"\1", raw[i:j + 1]))
+        except json.JSONDecodeError:
+            return None
+
+def validate(d, qtype):
+    if not isinstance(d, dict):
+        REJECT["not_json"] += 1; return None
+    q = clean(d.get("question"))
+    if len(q) < 25:
+        REJECT["question_too_short"] += 1; return None
+    if BAD_CONTEXT.search(q):
+        REJECT["leans_on_hidden_context"] += 1; return None
+
+    opts = {L: clean(d.get("option_%s" % L)) for L in LETTERS}
+    opts = {L: v for L, v in opts.items() if v}
+    need = 5 if qtype == "Multiple selection" else 4
+    if len(opts) < need:
+        REJECT["too_few_options"] += 1; return None
+    if len({v.lower() for v in opts.values()}) < len(opts):
+        REJECT["duplicate_options"] += 1; return None
+
+    keys = [k.strip().upper() for k in str(d.get("correct_answer", "")).split(",") if k.strip()]
+    keys = [k for k in keys if k.lower() in opts]
+    if not keys:
+        REJECT["answer_key_missing"] += 1; return None
+    if qtype == "Multiple selection" and len(keys) < 2:
+        REJECT["multiselect_single_answer"] += 1; return None
+    if qtype != "Multiple selection" and len(keys) != 1:
+        REJECT["singleselect_multi_answer"] += 1; return None
+
+    ans = clean(d.get("answer_text")) or opts[keys[0].lower()]
+    if ans.lower() not in {v.lower() for v in opts.values()}:
+        ans = opts[keys[0].lower()]
+    if len(ans) > 3 and ans.lower() in q.lower():
+        REJECT["answer_leaked_into_question"] += 1; return None
+
+    return {"question": q, "options": opts, "keys": keys, "answer_text": ans,
+            "explanation": clean(d.get("explanation"))[:600]}
+
+print("validator ready")''')
+
+md(r"""## 7 - Generation loop
+
+Checkpoints after every batch. Re-running the notebook skips whatever is already
+in `checkpoint.jsonl`, so a session timeout costs only the batch in flight.""")
+
+code(r'''CKPT = os.path.join(OUT_DIR, "checkpoint.jsonl")
+rows, done_facts = [], set()
+if os.path.exists(CKPT):
+    for line in open(CKPT, encoding="utf-8"):
+        if line.strip():
+            r = json.loads(line)
+            rows.append(r); done_facts.add(r["fact_id"])
+    print("resumed: %d rows, %d facts done" % (len(rows), len(done_facts)))
+
+pool_by_book = defaultdict(list)
+for f in ALL_FACTS:
+    pool_by_book[f["chunk"]["book"]].append(f["text"])
+
+type_cycle = []
+for t, share in TYPE_MIX.items():
+    type_cycle += [t] * max(1, int(round(share * 100)))
+random.shuffle(type_cycle)
+
+def plan_for(fact, i):
+    n = quota(fact)
+    ts, seen, k = [], set(), i
+    while len(ts) < n:
+        t = type_cycle[k % len(type_cycle)]
+        k += 1
+        if t not in seen:
+            ts.append(t); seen.add(t)
+        elif len(seen) >= len(TYPES):
+            ts.append(t)
+    return [(t, "hi" if random.random() < HINDI_SHARE else "en") for t in ts]
+
+jobs = []
+for i, f in enumerate(f for f in ALL_FACTS if f["fact_id"] not in done_facts):
+    for qtype, lang in plan_for(f, i):
+        jobs.append((f, qtype, lang))
+    if len(rows) + len(jobs) >= TARGET:
+        break
+print("jobs queued:", len(jobs))
+
+def flush():
+    with open(CKPT, "w", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+t0, made = time.time(), 0
+for s in range(0, len(jobs), BATCH):
+    batch = jobs[s:s + BATCH]
+    msgs = [build_prompt(f, t, l,
+                random.sample(pool_by_book[f["chunk"]["book"]],
+                              min(6, len(pool_by_book[f["chunk"]["book"]]))))
+            for f, t, l in batch]
+    try:
+        outs = generate(msgs)
+    except Exception as e:
+        print("batch failed (%s), skipping" % type(e).__name__); continue
+
+    for (f, qtype, lang), raw in zip(batch, outs):
+        v = validate(extract_json(raw), qtype)
+        if v is None:
+            continue
+        ch = f["chunk"]
+        qid = "%s-%s-%s" % (ch["code"], SHORT[qtype],
+              hashlib.md5((f["fact_id"] + qtype + lang + v["question"][:40]).encode()
+                          ).hexdigest()[:10])
+        row = {"question_id": qid, "fact_id": f["fact_id"],
+               "format_variant": "qwen_" + SHORT[qtype].lower(),
+               "question": v["question"], "correct_answer": ",".join(v["keys"]),
+               "answer_text": v["answer_text"], "question_type": qtype,
+               "grounding": f["text"][:400], "difficulty": "Medium",
+               "n_options": len(v["options"]), "n_correct": len(v["keys"]),
+               "subject_domain": DOMAIN.get(ch["primary_category"],
+                                            "Samhita & Siddhanta (Fundamentals)"),
+               "language": lang, "source_book": ch["book"], "sthana": ch["sthana"],
+               "chapter_number": ch["chapter_number"],
+               "chapter_title": ch["chapter_title"], "verse_id": ch["verse_id"],
+               "chunk_id": ch["chunk_id"], "primary_category": ch["primary_category"],
+               "citation": citation(ch), "source_richness": f["richness"],
+               "fact_kind": "llm_statement", "explanation": v["explanation"],
+               "context": ch["sanskrit"][:300], "generator": MODEL}
+        for L in LETTERS:
+            row["option_%s" % L] = v["options"].get(L, "")
+        rows.append(row); made += 1
+
+    flush()
+    if (s // BATCH) % 20 == 0:
+        el = time.time() - t0
+        rate = made / max(el, 1)
+        print("  %6d kept | %5.1f/s | eta %.1fh"
+              % (len(rows), rate, max(0, TARGET - len(rows)) / max(rate, .01) / 3600),
+              flush=True)
+    if len(rows) >= TARGET:
+        break
+
+flush()
+print("\nkept %d rows" % len(rows))
+print("rejects:", dict(REJECT.most_common()))
+tot = len(rows) + sum(REJECT.values())
+print("yield: %.1f%%" % (100 * len(rows) / max(tot, 1)))''')
+
+md("## 8 - Write the corpus and sanity-check it")
+
+code(r'''OUT = os.path.join(OUT_DIR, "master_80k_qwen.jsonl")
+rows = rows[:TARGET]
+with open(OUT, "w", encoding="utf-8") as fh:
+    for r in rows:
+        fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+print("wrote", OUT, len(rows), "rows")
+
+print("\nby type    :", dict(Counter(r["question_type"] for r in rows).most_common()))
+print("by language:", dict(Counter(r["language"] for r in rows)))
+print("by book    :", dict(Counter(r["source_book"] for r in rows).most_common()))
+print("distinct facts:", len({r["fact_id"] for r in rows}))
+print("distinct stems:", len({r["question"] for r in rows}))
+
+bad = [r for r in rows if r["answer_text"].lower() not in
+       {r.get("option_%s" % L, "").lower() for L in LETTERS if r.get("option_%s" % L)}]
+print("answer not among its options:", len(bad), "(must be 0)")
+
+import shutil
+shutil.make_archive("/kaggle/working/ayur_qwen_80k", "zip", OUT_DIR)
+print("\nzipped -> /kaggle/working/ayur_qwen_80k.zip")''')
+
+md(r"""---
+
+## Next
+
+Download `master_80k_qwen.jsonl` and run the downstream pipeline, which ships
+alongside this notebook and has already been dry-run end to end:
+
+```bash
+python scripts/Q1_quality_gate.py    --in master_80k_qwen.jsonl --out out/Q1_clean.jsonl --report reports/Q1.json
+python scripts/Q2_dedup.py           --in out/Q1_clean.jsonl    --out out/Q2_deduped.jsonl --report reports/Q2.json
+python scripts/Q3_match_ayurparam.py --in out/Q2_deduped.jsonl  --bba data/bba_en.parquet data/bba_hi.parquet \
+                                     --out out/Q3_annotated.jsonl --report reports/Q3.json
+python scripts/Q4_build_splits.py    --in out/Q3_annotated.jsonl --bba data/bba_en.parquet data/bba_hi.parquet \
+                                     --outdir final --val-rows 1000 --report reports/Q4.json
+python scripts/Q5_check_leakage.py   --dir final --repair --report reports/Q5.json
+python scripts/Q6_partition.py       --dir final --outdir out/Q6_partitions --report reports/Q6.json
+python scripts/Q7_md5_minhash.py     --dir final --report reports/Q7.json
+python scripts/Q8_eda_report.py      --dir final --reports reports --out EDA_QWEN_REPORT.html
+```""")
+
+nb = {"cells": C,
+      "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python",
+                                  "name": "python3"},
+                   "language_info": {"name": "python", "version": "3.10"},
+                   "accelerator": "GPU"},
+      "nbformat": 4, "nbformat_minor": 5}
+out = sys.argv[1] if len(sys.argv) > 1 else "qwen_generate_80k.ipynb"
+with open(out, "w", encoding="utf-8") as fh:
+    json.dump(nb, fh, ensure_ascii=False, indent=1)
+print("wrote %s (%d cells)" % (out, len(C)))

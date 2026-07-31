@@ -1,0 +1,100 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>AyurShloka-QA v3 (Qwen) — pipeline EDA</title>
+<style>
+:root{--ink:#16130f;--mute:#6b6259;--line:#e2ddd4;--bg:#faf8f4;--card:#fff;
+      --good:#1a7f52;--bad:#b3341f;--accent:#3d5a80}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:44px 26px 76px}
+h1{font-size:29px;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--mute);margin:0 0 30px;font-size:14px}
+h2{font-size:20px;margin:46px 0 6px;padding-top:18px;border-top:2px solid var(--ink)}
+h2 .n{color:var(--mute);font-weight:400;font-size:15px}
+h3{font-size:13.5px;margin:22px 0 8px;text-transform:uppercase;
+   letter-spacing:.07em;color:var(--mute)}
+table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--card);
+      font-size:14px;border:1px solid var(--line)}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line)}
+th{background:#f2eee7;font-weight:600;font-size:11.5px;text-transform:uppercase;
+   letter-spacing:.05em;color:var(--mute)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+tr.tot td{font-weight:700;background:#f7f4ee}
+code{background:#efeae2;padding:1px 5px;border-radius:3px;font-size:12.5px;
+     font-family:ui-monospace,Menlo,monospace}
+.g{color:var(--good);font-weight:600}.r{color:var(--bad);font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+       gap:11px;margin:18px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:13px 15px}
+.card .v{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.card .l{font-size:11px;color:var(--mute);text-transform:uppercase;
+         letter-spacing:.06em;margin-top:4px}
+.note{background:#fff;border-left:3px solid var(--accent);padding:11px 15px;
+      margin:14px 0;font-size:14px}
+.note.bad{border-left-color:var(--bad);background:#fdf5f3}
+.note.ok{border-left-color:var(--good);background:#f2f9f5}
+.miss{color:var(--mute);font-style:italic}
+.bar{height:8px;background:#e8e3da;border-radius:4px;overflow:hidden;display:flex;min-width:90px}
+.bar i{display:block;height:100%}
+small{color:var(--mute)}
+</style></head><body><div class='wrap'>
+<h1>AyurShloka-QA v3 (Qwen) — pipeline EDA</h1>
+<p class="sub">Every stage from raw generation to the delivered splits. Numbers are read from the per-step reports, not restated from memory — a missing report is shown as missing.</p>
+<div class="cards">
+<div class="card"><div class="v ">5,760</div><div class="l">train rows</div></div>
+<div class="card"><div class="v ">1,000</div><div class="l">validation rows</div></div>
+<div class="card"><div class="v ">599</div><div class="l">test rows</div></div>
+<div class="card"><div class="v g">0</div><div class="l">duplicates</div></div>
+<div class="card"><div class="v g">0</div><div class="l">cross-split leaks</div></div>
+</div>
+<h2><span class="n">1 ·</span> Quality gate</h2>
+<table><tr><th class=""></th><th class="n">Rows</th></tr><tr><td class="">Generated</td><td class="n">8,000</td></tr><tr><td class="">Passed</td><td class="n">7,612</td></tr><tr><td class="">Rejected</td><td class="n">388</td></tr><tr class="tot"><td class="">Total</td><td class="n">95.2% pass rate</td></tr></table>
+<h3>Why rows were rejected</h3>
+<table><tr><th class="">Reason</th><th class="n">Rows</th><th class="n">Share of rejects</th></tr><tr><td class="">missing_field:correct_answer</td><td class="n">168</td><td class="n">43.3%</td></tr><tr><td class="">answer_leaked_into_question</td><td class="n">167</td><td class="n">43.0%</td></tr><tr><td class="">degenerate_option</td><td class="n">32</td><td class="n">8.2%</td></tr><tr><td class="">hidden_context</td><td class="n">21</td><td class="n">5.4%</td></tr></table>
+<div class="note">An LLM asked for JSON fails in characteristic ways. The counts above are the honest yield; a reject rate above roughly 15% is a prompt problem rather than noise, and is worth fixing before committing to a long run.</div>
+<h3>Answer position bias</h3>
+<table><tr><th class="">Option</th><th class="n">Before</th><th class="n">%</th><th class="n">After</th><th class="n">%</th></tr><tr><td class="">a</td><td class="n">2,121</td><td class="n">23.7</td><td class="n">2,131</td><td class="n">23.8</td></tr><tr><td class="">b</td><td class="n">2,162</td><td class="n">24.1</td><td class="n">2,139</td><td class="n">23.9</td></tr><tr><td class="">c</td><td class="n">2,061</td><td class="n">23.0</td><td class="n">2,129</td><td class="n">23.8</td></tr><tr><td class="">d</td><td class="n">2,161</td><td class="n">24.1</td><td class="n">2,094</td><td class="n">23.4</td></tr><tr><td class="">e</td><td class="n">448</td><td class="n">5.0</td><td class="n">460</td><td class="n">5.1</td></tr></table>
+<div class="note">If the correct answer sits at one letter far more often than chance, a model can score well by always picking it and learn nothing about Ayurveda.</div>
+<h2><span class="n">2 ·</span> Deduplication</h2>
+<table><tr><th class="">Pass</th><th class="n">Removed</th></tr><tr><td class="">Exact stem</td><td class="n">0</td></tr><tr><td class="">Full item</td><td class="n">0</td></tr><tr><td class="">Near-duplicate</td><td class="n">120</td></tr><tr class="tot"><td class="">Total</td><td class="n">120</td></tr></table>
+<p>7,612 rows in, 7,492 out, 6,856 distinct facts remaining.</p>
+<h2><span class="n">3 ·</span> AyurParam similarity</h2>
+<table><tr><th class="">Measure</th><th class="n">Value</th></tr><tr><td class="">Questions scored</td><td class="n">7,492</td></tr><tr><td class="">Benchmark questions</td><td class="n">14,963</td></tr><tr><td class="">Flagged similar</td><td class="n">0</td></tr><tr><td class="">Max cosine</td><td class="n">0.7401</td></tr><tr><td class="">Mean cosine</td><td class="n">0.4418</td></tr><tr><td class="">99.9th percentile</td><td class="n">0.6747</td></tr><tr><td class="">Max Levenshtein</td><td class="n">0.7515</td></tr></table>
+<h3>Threshold sweep</h3>
+<table><tr><th class="">Cosine ≥</th><th class="n">Questions</th></tr><tr><td class="">0.5</td><td class="n">1,908</td></tr><tr><td class="">0.55</td><td class="n">989</td></tr><tr><td class="">0.6</td><td class="n">412</td></tr><tr><td class="">0.65</td><td class="n">36</td></tr><tr><td class="">0.7</td><td class="n">2</td></tr><tr><td class="">0.75</td><td class="n">0</td></tr><tr><td class="">0.8</td><td class="n">0</td></tr><tr><td class="">0.85</td><td class="n">0</td></tr><tr><td class="">0.9</td><td class="n">0</td></tr></table>
+<div class="note ok"><b>0 questions resemble the benchmark.</b> Max cosine 0.7401 against a 0.8 threshold. Duplication inside the corpus and resemblance to an external benchmark are unrelated properties; a low number here is the expected result for questions generated from classical treatises against a benchmark drawn from exam papers.</div>
+<h3>Closest pairs</h3>
+<table><tr><th class="n">Cosine</th><th class="">Ours</th><th class="">Benchmark</th></tr><tr><td class="n">0.7401</td><td class="">In the following passage from Ashtanga Hridaya — Sutrasthana, Chapter 1, the term [X] has been masked. Which term is it?
+
+1. Kaya Chikitsa –</td><td class="">Garbha chikitsa B) Kumara chikitsa A) Shishu chikitsa Bala chikitsa C) D)</td></tr><tr><td class="n">0.7051</td><td class="">According to the Sharangadhara Samhita, which of the following is a synonym (paryāya) of वक्तव्य?</td><td class="">The synonym of ‘Lepa’ according to Sharangdhar Samhita is</td></tr><tr><td class="n">0.6792</td><td class="">According to the Bhavaprakasha Nighantu, which of the following is a synonym (paryāya) of VANSA?</td><td class="">According to the reference of Bhavaprakash; which of the following drug is
+one of the ingredients of Veshavar</td></tr><tr><td class="n">0.6792</td><td class="">According to the Bhavaprakasha Nighantu, which of the following is a synonym (paryāya) of ASOKA?</td><td class="">According to the reference of Bhavaprakash; which of the following drug is
+one of the ingredients of Veshavar</td></tr><tr><td class="n">0.6792</td><td class="">According to the Bhavaprakasha Nighantu, which of the following is a synonym (paryāya) of Mayur?</td><td class="">According to the reference of Bhavaprakash; which of the following drug is
+one of the ingredients of Veshavar</td></tr></table>
+<h2><span class="n">4 ·</span> Splits</h2>
+<table><tr><th class="">Split</th><th class="n">Rows</th><th class="n">Facts</th><th class="n">Max BBA cosine</th></tr><tr><td class="">train</td><td class="n">5,893</td><td class="n">5,380</td><td class="n">0.7401</td></tr><tr><td class="">validation</td><td class="n">1,000</td><td class="n">920</td><td class="n">0.6786</td></tr><tr><td class="">test</td><td class="n">599</td><td class="n">556</td><td class="n">0.6792</td></tr></table>
+<div class="note"><b>Test mirrors the benchmark's composition.</b> distribution mirror of BhashaBench-Ayur (domain x type x language); per-question similarity yields an empty set on this corpus</div>
+<h3>Mirror fit — Question type</h3>
+<table><tr><th class="">Question type</th><th class="n">Benchmark %</th><th class="n">Test %</th><th class="n">Delta</th></tr><tr><td class="">MCQ</td><td class="n">98.36</td><td class="n">82.3</td><td class="n">-16.05</td></tr><tr><td class="">Fill in the blanks</td><td class="n">1.19</td><td class="n">3.34</td><td class="n">+2.15</td></tr><tr><td class="">Match the column</td><td class="n">0.27</td><td class="n">5.84</td><td class="n">+5.57</td></tr><tr><td class="">Assertion or Reasoning</td><td class="n">0.18</td><td class="n">2.17</td><td class="n">+1.99</td></tr><tr><td class="">Multiple selection</td><td class="n">0</td><td class="n">3.67</td><td class="n">+3.67</td></tr><tr><td class="">Assorted</td><td class="n">0</td><td class="n">2.67</td><td class="n">+2.67</td></tr></table>
+<h3>Mirror fit — Language</h3>
+<table><tr><th class="">Language</th><th class="n">Benchmark %</th><th class="n">Test %</th><th class="n">Delta</th></tr><tr><td class="">en</td><td class="n">62.47</td><td class="n">100.0</td><td class="n">+37.53</td></tr><tr><td class="">hi</td><td class="n">37.53</td><td class="n">0</td><td class="n">-37.53</td></tr></table>
+<h3>Mirror fit — Subject domain</h3>
+<table><tr><th class="">Subject domain</th><th class="n">Benchmark %</th><th class="n">Test %</th><th class="n">Delta</th></tr><tr><td class="">Kayachikitsa (General Medicine & Internal Medicine in Ayurveda)</td><td class="n">20.94</td><td class="n">0</td><td class="n">-20.94</td></tr><tr><td class="">Dravyaguna & Bhaishajya</td><td class="n">19.86</td><td class="n">0</td><td class="n">-19.86</td></tr><tr><td class="">Samhita & Siddhanta (Fundamentals)</td><td class="n">10.3</td><td class="n">0</td><td class="n">-10.30</td></tr><tr><td class="">Sharir (Anatomy & Physiology)</td><td class="n">9.0</td><td class="n">6.18</td><td class="n">-2.82</td></tr><tr><td class="">Panchakarma & Rasayana</td><td class="n">8.74</td><td class="n">0</td><td class="n">-8.74</td></tr><tr><td class="">Stri Roga & Prasuti Tantra (Gynecology & Obstetrics)</td><td class="n">5.66</td><td class="n">5.51</td><td class="n">-0.15</td></tr><tr><td class="">Shalakya Tantra (ENT, Eye, Dentistry)</td><td class="n">4.91</td><td class="n">0</td><td class="n">-4.91</td></tr><tr><td class="">Kaumarbhritya & Pediatrics</td><td class="n">4.77</td><td class="n">0</td><td class="n">-4.77</td></tr><tr><td class="">Agad Tantra & Forensic Medicine</td><td class="n">3.92</td><td class="n">0</td><td class="n">-3.92</td></tr><tr><td class="">Shalya Tantra (Surgery)</td><td class="n">3.52</td><td class="n">9.85</td><td class="n">+6.33</td></tr><tr><td class="">Swasthavritta & Public Health</td><td class="n">3.03</td><td class="n">0</td><td class="n">-3.03</td></tr><tr><td class="">Research & Statistics</td><td class="n">1.4</td><td class="n">0</td><td class="n">-1.40</td></tr><tr><td class="">Ayurvedic Literature & History</td><td class="n">1.36</td><td class="n">1.84</td><td class="n">+0.47</td></tr><tr><td class="">Yoga & Psychology</td><td class="n">1.26</td><td class="n">0</td><td class="n">-1.26</td></tr><tr><td class="">Administration, AYUSH & Miscellaneous</td><td class="n">0.8</td><td class="n">0</td><td class="n">-0.80</td></tr><tr><td class="">Roga Vigyana (Diagnostics & Pathology)</td><td class="n">0.53</td><td class="n">65.78</td><td class="n">+65.24</td></tr></table>
+<p>Fact overlaps — train/val 0, train/test 0, val/test 0. All must be zero: a fact renders into several questions, and splitting one across sides is leakage dressed as generalisation.</p>
+<h2><span class="n">5 ·</span> Cross-split leakage</h2>
+<table><tr><th class="">State</th><th class="n">id</th><th class="n">stem</th><th class="n">fact</th><th class="n">near-dup val</th><th class="n">near-dup test</th><th class="">Verdict</th></tr><tr><td class="">Before repair</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">35</td><td class="n">15</td><td class="">LEAKAGE DETECTED</td></tr><tr><td class="">After repair</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="">CLEAN</td></tr></table>
+<div class="note bad"><b>Splitting on fact_id is necessary but not sufficient.</b> Exact checks can be clean while near-duplicate stems still cross splits, because two different facts can render through one template into nearly the same question. Only the near-duplicate check sees it.</div>
+<h2><span class="n">6 ·</span> MD5 and MinHash</h2>
+<table><tr><th class="">Check</th><th class="n">Result</th></tr><tr><td class="">MD5 duplicate rows</td><td class="n">0</td></tr><tr><td class="">MD5 groups with conflicting gold answers</td><td class="n">0</td></tr><tr><td class="">MinHash similar pairs</td><td class="n">59</td></tr><tr><td class="">MinHash true duplicates (same answer)</td><td class="n">0</td></tr><tr><td class="">MinHash cross-split pairs</td><td class="n">0</td></tr></table>
+<div class="note"><b>Similar is not duplicate.</b> similarity alone is not duplication in a templated corpus. A pair must share its gold answer to be a duplicate, and a cross-split pair must share its gold answer to be leakage --- otherwise the model saw the question shape, not the answer.</div>
+<h3>Across the benchmark boundary</h3>
+<table><tr><th class="">Method</th><th class="n">Matches</th></tr><tr><td class="">MD5 exact</td><td class="n">0</td></tr><tr><td class="">MinHash</td><td class="n">0</td></tr><tr><td class="">Max Jaccard seen</td><td class="n">0.0</td></tr><tr><td class="">Max stored cosine</td><td class="n">0.7401</td></tr></table>
+<div class="note ok">Verdict: <b>CLEAN</b></div>
+<h2><span class="n">7 ·</span> By question type and language</h2>
+<h3>Question type</h3>
+<table><tr><th class="">Type</th><th class="n">train</th><th class="n">validation</th><th class="n">test</th></tr><tr><td class="">Fill in the blanks</td><td class="n">1,624</td><td class="n">274</td><td class="n">20</td></tr><tr><td class="">Assorted</td><td class="n">1,231</td><td class="n">195</td><td class="n">16</td></tr><tr><td class="">Assertion or Reasoning</td><td class="n">988</td><td class="n">164</td><td class="n">13</td></tr><tr><td class="">MCQ</td><td class="n">964</td><td class="n">181</td><td class="n">493</td></tr><tr><td class="">Multiple selection</td><td class="n">575</td><td class="n">109</td><td class="n">22</td></tr><tr><td class="">Match the column</td><td class="n">378</td><td class="n">77</td><td class="n">35</td></tr><tr class="tot"><td class="">Total</td><td class="n">5,760</td><td class="n">1,000</td><td class="n">599</td></tr></table>
+<h3>Language</h3>
+<table><tr><th class="">Language</th><th class="n">train</th><th class="n">validation</th><th class="n">test</th></tr><tr><td class="">en</td><td class="n">5,760</td><td class="n">1,000</td><td class="n">599</td></tr><tr class="tot"><td class="">Total</td><td class="n">5,760</td><td class="n">1,000</td><td class="n">599</td></tr></table>
+<h3>Source text</h3>
+<table><tr><th class="">Book</th><th class="n">train</th><th class="n">validation</th><th class="n">test</th></tr><tr><td class="">Bhavaprakasha Nighantu</td><td class="n">2,110</td><td class="n">395</td><td class="n">57</td></tr><tr><td class="">Madhava Nidanam (Part 1)</td><td class="n">833</td><td class="n">145</td><td class="n">206</td></tr><tr><td class="">Charaka Samhita</td><td class="n">804</td><td class="n">120</td><td class="n">68</td></tr><tr><td class="">Madhava Nidana (Laghutrayi)</td><td class="n">709</td><td class="n">108</td><td class="n">82</td></tr><tr><td class="">Madhava Nidanam (Part 2)</td><td class="n">601</td><td class="n">99</td><td class="n">74</td></tr><tr><td class="">Ashtanga Hridaya</td><td class="n">401</td><td class="n">78</td><td class="n">24</td></tr><tr><td class="">Sharangadhara Samhita</td><td class="n">200</td><td class="n">30</td><td class="n">2</td></tr><tr><td class="">Sushruta Samhita</td><td class="n">102</td><td class="n">25</td><td class="n">86</td></tr><tr class="tot"><td class="">Total</td><td class="n">5,760</td><td class="n">1,000</td><td class="n">599</td></tr></table>
+</div></body></html>
