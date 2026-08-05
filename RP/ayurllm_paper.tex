@@ -683,36 +683,122 @@ union of all four reaches only 0.71, indicating substantial headroom in the
 benchmark itself.
 
 % =====================================================================
-\section{Model Trimming and Pruning}
+\section{Model Trimming and Final Model Selection}
 \label{sec:pruning}
 
-Deployment targets a single local accelerator, the same constraint that
-governed extraction. Vocabulary trimming and structured pruning are planned
-ahead of fine-tuning, with quantised export as the deployment artefact.
+Section~\ref{sec:selection} identified Qwen2.5-3B-Instruct as the
+strongest baseline for \emph{evaluation}. The fine-tuning model is a
+separate choice governed by deployment constraints rather than
+zero-shot accuracy: a 2--4B base model that tokenizes Sanskrit
+efficiently and fits a single consumer accelerator. We audited
+tokenizer fertility and byte-fallback behaviour across twelve
+candidates to make that choice principled.
 
-\gap{Trimming and pruning --- not yet performed}{%
-To complete: vocabulary trimming criterion and retained vocabulary size,
-justified against the Devanagari and IAST coverage required by
-Sec.~\ref{sec:characterisation}; pruning method, granularity and target
-sparsity; parameter count and on-disk size before and after; and the change
-in Table~\ref{tab:selection} accuracy attributable to compression alone,
-measured before any fine-tuning.}
+\subsection{Tokenizer coverage audit}
+
+For each candidate we measure three statistics on the verified corpus:
+\emph{fertility} (tokens emitted per whitespace-delimited word, overall
+and Devanagari-specifically) and \emph{byte-fallback fraction} (proportion
+of tokens decoded via byte fallback, indicating characters absent from the
+vocabulary). Lower Devanagari fertility and lower byte-fallback fraction
+both indicate a vocabulary that handles Sanskrit script more efficiently.
+The audit covers twelve models in the 1--5B parameter class;
+Table~\ref{tab:trimming} shows the main results.
+(Source: \texttt{trimming/coverage\_report.json}.)
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+\textbf{Model} & \textbf{Par.} & \textbf{Vocab} & \textbf{Fert.} & \textbf{F.Dev.} & \textbf{BFB} \\
+\midrule
+gemma-4-E2B-it$^\dagger$   & 5.1B & 262k & 2.49 & 4.10 & 0.000 \\
+gemma-2-2b-it              & 2.6B & 256k & 2.64 & 4.79 & 0.000 \\
+\textbf{sarvam-1}          & \textbf{2.0B} & \textbf{68k} & \textbf{3.01} & \textbf{4.49} & \textbf{0.086} \\
+Qwen3-1.7B / Qwen2.5-3B   & 1.7--3B & 152k & 3.63 & 8.00 & 0.297 \\
+Falcon3-1B                 & 1.7B & 131k & 3.96 & 9.11 & 0.182 \\
+granite-3.3-2b             & 2.5B &  49k & 4.32 & 10.36 & 0.307 \\
+LFM2.5-1.2B                & 1.2B &  64k & 4.29 & 11.13 & 0.534 \\
+\bottomrule
+\end{tabular}
+\caption{Tokenizer coverage audit (selected candidates). \emph{Fert.}\ = overall
+fertility; \emph{F.Dev.}\ = Devanagari-specific fertility; \emph{BFB}\ = byte-fallback
+fraction. Lower is better for all three.
+$^\dagger$ Exceeds 4B parameter budget.
+Source: \texttt{trimming/coverage\_report.json}.}
+\label{tab:trimming}
+\end{table}
+
+\subsection{Selected model: sarvam-1}
+
+We select \textbf{sarvamai/sarvam-1} (2.0B parameters, vocabulary size
+68{,}096) as the base for fine-tuning. It achieves Devanagari fertility
+4.49 and byte-fallback fraction 0.086, placing it second only to Gemma
+models on script coverage while remaining within the 4B parameter
+deployment budget (unlike \texttt{gemma-4-E2B-it}). The fine-tuning
+checkpoint is published as \texttt{nishm27/sarvam-1-TRIM} on Hugging Face.
+
+sarvam-1 is a base model without a chat template; the training harness
+falls back to a plain \texttt{User:/Answer:} framing automatically.
+This means its loss is not directly comparable with an instruct model's,
+but does not prevent evaluation on the same item set.
 
 % =====================================================================
 \section{Fine-Tuning Protocol}
 \label{sec:finetune}
 
-Fine-tuning proceeds from the selected base model on the instruction corpus
-of Sec.~\ref{sec:synthesis}, split on the fact identifier. The evaluation
-subset of Sec.~\ref{sec:selection} is held out entirely.
+Fine-tuning proceeds from the selected base model
+(\texttt{nishm27/sarvam-1-TRIM}, Sec.~\ref{sec:pruning}) on the
+instruction corpus of Sec.~\ref{sec:synthesis}, split on the fact
+identifier. The evaluation subset of Sec.~\ref{sec:selection} is
+held out entirely.
 
-\gap{Fine-tuning --- not yet performed}{%
-To complete: adaptation method and, if low-rank, the rank, scaling factor and
-target modules; learning rate, schedule, epochs, effective batch size and
-sequence length; the sampling policy over the 80{,}000 items, in particular
-whether the Bhavaprakasha over-representation noted in
-Sec.~\ref{sec:synthesis} was corrected; hardware and wall-clock cost; and the
-checkpoint selection criterion.}
+\subsection{Adaptation method and hyperparameter search}
+
+Parameter-efficient fine-tuning uses Low-Rank Adaptation (LoRA)
+applied to the query, key, value, output, gate, up, and down
+projection modules. The hyperparameter search space is defined in
+\texttt{Hyperparameter\_tuning/search\_space.json} and spans
+learning rate (log-uniform $5{\times}10^{-5}$--$5{\times}10^{-4}$),
+LR scheduler type (cosine $|$ linear $|$ const+warmup), warmup ratio
+(0.01--0.10), weight decay (0.00--0.10), gradient norm clip
+(0.5--1.0), per-device batch size ($\{2, 4, 8\}$), gradient
+accumulation steps ($\{4, 8, 16\}$), LoRA rank
+($\{8, 16, 32, 64\}$), LoRA alpha multiplier ($\{1, 2\}$, i.e.,
+$\alpha \in \{r, 2r\}$), LoRA dropout (0.00--0.15), and maximum
+sequence length ($\{768, 1024, 1536\}$).
+
+Search proceeds in three stages:
+\begin{enumerate}\itemsep2pt
+\item \textbf{Baseline} (1 trial) --- known-good settings verify
+the model trains and establish an eval-loss baseline.
+\item \textbf{Random search} (15 trials) --- broad uniform sampling
+to map the search space before fitting a density model.
+\item \textbf{Bayesian optimisation} (25 trials, TPE with median
+pruner) --- focused sampling, resumable via Optuna SQLite state
+(\texttt{study.db}).
+\end{enumerate}
+Each trial is capped at 400 steps on a random 8{,}000-item
+sub-sample. A stall detector terminates trials showing no loss
+movement (\textit{flat}), divergence (\textit{diverged}), or
+persistent failure to improve (\textit{no\_progress}); these
+are logged as pruned, not scored. Execution uses a Kaggle T4 GPU
+notebook with Weights~\&~Biases (W\&B) tracking.
+No completed run results are in the current repository snapshot;
+status is recorded as pending.
+
+\subsection{Training data statistics}
+
+The training split contains 65{,}701 rows drawn from all six
+question types across the eight volumes, with zero fact overlap
+against validation or test
+(\texttt{REPORTS/04\_split\_report.json}). Difficulty is
+distributed as Easy 53.1\%, Medium 42.2\%, Hard 4.7\%.
+Bhavaprakasha Nighantu accounts for $\approx$34\% of training
+items; a volume-balanced sub-sample is available but not applied
+by default.
 
 % =====================================================================
 \section{Benchmarking Against AyurParam}
@@ -784,13 +870,131 @@ verse identifier and chunk identifier of its source.
 \section{Experiments}
 \label{sec:experiments}
 
-\gap{Experiments --- reserved}{%
-To be populated once Secs.~\ref{sec:pruning}--\ref{sec:ayurparam} are
-executed. Should consolidate: compression cost; fine-tuning gain per question
-format with paired significance tests as in Sec.~\ref{sec:selection}; the
-AyurParam comparison in both directions; and an ablation isolating which of
-the quality controls in Sec.~\ref{sec:controls} materially affected
-downstream accuracy.}
+\subsection{Base-model results by question type}
+\label{sec:exp_base}
+
+Table~\ref{tab:bytype} breaks the overall accuracies of
+Table~\ref{tab:selection} down by question type. All four models
+were evaluated on the same 100-item set (25 items per type;
+Sec.~\ref{sec:selection}); numbers are from
+\texttt{EDA/master\_leaderboard.csv}.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Model} & \textbf{Assert.} & \textbf{MCQ} & \textbf{Fill} & \textbf{Match} \\
+\midrule
+Qwen2.5-3B-Instruct   & 0.32 & 0.60 & 0.72 & 0.40 \\
+Phi-3-mini-4k         & 0.28 & 0.48 & 0.40 & 0.40 \\
+gemma-2-2b-it         & 0.16 & 0.56 & 0.48 & 0.24 \\
+Llama-3.2-3B-Instruct & 0.28 & 0.44 & 0.32 & 0.12 \\
+\textbf{sarvam-1}     & \multicolumn{4}{c}{\emph{--- not yet evaluated ---}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-type accuracy breakdown on the same 100-item set as
+Table~\ref{tab:selection} (25 items per type; chance = 0.25 for each).
+Overall accuracy is in Table~\ref{tab:selection}; format compliance is
+1.00 for all models except Llama-3.2-3B-Instruct (0.92). sarvam-1 was
+selected via the tokenizer audit (Sec.~\ref{sec:pruning}), not via
+this evaluation, and has not yet been benchmarked on this set.
+Source: \texttt{EDA/master\_leaderboard.csv}.}
+\label{tab:bytype}
+\end{table}
+
+Two findings are noteworthy. First, assertion-reason items remain near
+chance for all models: even the best base (Qwen2.5-3B, 0.32) achieves
+only 0.07 above chance, and gemma-2-2b-it falls below it at 0.16.
+Match-the-column is similarly hard (range 0.12--0.40). These two types
+are the principal targets for fine-tuning gain measurement. Second,
+fill-in-the-blank is easiest (best base 0.72), suggesting this format
+may not require deep domain knowledge and should be weighted accordingly
+in any composite accuracy summary.
+
+\subsection{Data pipeline statistics}
+\label{sec:exp_pipeline}
+
+Table~\ref{tab:pipeline} consolidates the item counts at each stage
+of the data pipeline for reproducibility. Corpus counts at the
+top of the table are consistent with Table~\ref{tab:corpus};
+all subsequent counts are from the named REPORTS files.
+
+\begin{table*}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}lrll@{}}
+\toprule
+\textbf{Stage} & \textbf{Items} & \textbf{Report file} & \textbf{Note} \\
+\midrule
+Verified corpus chunks           & 5{,}838       & Table~\ref{tab:corpus}   & After quality filtering \\
+Total tokens (Gemma-3 tokenizer) & 2{,}708{,}568 & Table~\ref{tab:corpus}   & 51.9\% Sanskrit, 45.7\% English, 2.4\% Hindi \\
+Generated questions (raw)        & 80{,}000      & (synthesis output)        & 6 formats, 35{,}016 source facts \\
+After exact-stem dedup           & 79{,}990      & R01                       & MD5 on question stem \\
+After near-duplicate dedup       & 77{,}355      & R01                       & MinHash cosine $\geq 0.97$ \\
+AyurParam contamination check    & 0 quarantined & R02                       & Max cosine 0.74 $<$ threshold 0.80 \\
+Training split (raw)             & 65{,}701      & R04                       & 85.0\% of deduplicated corpus \\
+Validation split (raw)           & 5{,}436       & R04                       & 7.0\% \\
+Test split (raw)                 & 6{,}218       & R04                       & 8.0\% \\
+Validation after leakage repair  & 4{,}954       & R05                       & 482 near-duplicates removed \\
+Test after leakage repair        & 5{,}648       & R05                       & 570 near-duplicates removed \\
+Post-repair leaks remaining      & 0             & R05                       & Cosine $< 0.95$ to all training items \\
+\bottomrule
+\end{tabular}
+\caption{Data pipeline statistics at each processing stage.
+\emph{Report file} short codes: R01 = \texttt{REPORTS/01\_dedup\_report.json};
+R02 = \texttt{REPORTS/02\_ayurparam\_match\_report.json};
+R04 = \texttt{REPORTS/04\_split\_report.json};
+R05 = \texttt{REPORTS/05\_leakage\_after\_repair.json}.
+Corpus chunk and token counts are consistent with Table~\ref{tab:corpus}.
+AyurParam public benchmark questions (14{,}963 items) are fully disjoint
+from the training set.}
+\label{tab:pipeline}
+\end{table*}
+
+\subsection{Question-type distribution across splits}
+
+Table~\ref{tab:typesplit} shows the question-type distribution
+across training, validation and test splits.
+All counts are from \texttt{REPORTS/04\_split\_report.json};
+``Master'' is the total in the type-wise JSONL corpus before splitting.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Question Type} & \textbf{Master} & \textbf{Train} & \textbf{Val} & \textbf{Test} \\
+\midrule
+MCQ                    & 24{,}793 & 22{,}117 & 1{,}848 & 2{,}122 \\
+Assertion or Reasoning & 24{,}812 & 22{,}136 & 1{,}849 & 2{,}123 \\
+Fill in the blanks     & 12{,}397 & 11{,}059 &   924   & 1{,}061 \\
+Match the column       &  6{,}196 &  5{,}528 &   462   &   530   \\
+Multiple selection     &  6{,}199 &  5{,}530 &   462   &   531   \\
+Assorted               &  2{,}958 &  1{,}331 & \multicolumn{2}{c}{---} \\
+\bottomrule
+\end{tabular}
+\caption{Question-type distribution across splits.
+\emph{Master} = total items before splitting
+(\texttt{REPORTS/04\_split\_report.json}).
+``---'' denotes types not disaggregated in the current split report.}
+\label{tab:typesplit}
+\end{table}
+
+\subsection{Pending results}
+
+\gap{Fine-tuning and AyurParam evaluation --- pending}{%
+The following results are not yet available in the current repository
+snapshot and will replace this gap once runs complete:
+(a) sarvam-1 base-model accuracy on Table~\ref{tab:bytype};
+(b) per-type accuracy after LoRA fine-tuning, including
+paired-comparison significance tests against pre-fine-tuning baseline;
+(c) AyurParam benchmark scores for the fine-tuned sarvam-1 model;
+(d) W\&B run IDs and final hyperparameter configuration (best\_config.json)
+for reproducibility. See Sec.~\ref{sec:finetune} for the tuning protocol.}
 
 % =====================================================================
 \section{Limitations}

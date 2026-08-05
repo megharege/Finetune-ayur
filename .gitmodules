@@ -1,0 +1,3 @@
+[submodule "verified data"]
+	path = verified data
+	url = https://github.com/megharege/verified-data_tokens.git
