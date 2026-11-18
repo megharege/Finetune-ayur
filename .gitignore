@@ -14,3 +14,17 @@ __pycache__/
 
 # Logs
 *.log
+
+# Node / Frontend / Dependencies
+node_modules/
+.next/
+out/
+dist/
+.env.local
+
+# Binaries and DB files
+*.exe
+*.mdb
+*.npz
+**/data.ms/
+
